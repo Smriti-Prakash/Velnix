@@ -1,0 +1,5 @@
+Vendor Name,Total Previous Invoices,Average Invoice Amount,Last Invoice Date,Previous Rejections,Vendor Status,Trust Score,Last Bank Account Change
+Acme Corp,150,5000.0,2026-06-15,1,Trusted,95,2025-12-01
+Global Supplies Inc,45,12000.0,2026-05-20,0,Trusted,98,2026-01-10
+RiskCo LLC,12,8500.0,2026-04-10,5,Watchlist,35,2026-06-01
+NewTech Solutions,0,0.0,N/A,0,New,70,N/A

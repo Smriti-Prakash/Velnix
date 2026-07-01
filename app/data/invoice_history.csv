@@ -1,0 +1,4 @@
+Invoice Number,Vendor Name,Invoice Date,Amount
+INV-2026-001,Acme Corp,2026-06-15,10000.00
+INV-2026-999,Acme Global Corp,2026-06-30,15250.50
+INV-DUP-123,RiskCo LLC,2026-04-10,8500.00
