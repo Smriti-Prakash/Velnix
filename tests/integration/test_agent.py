@@ -55,3 +55,46 @@ def test_agent_stream() -> None:
             has_text_content = True
             break
     assert has_text_content, "Expected at least one message with text content"
+
+
+def test_agent_invoice_workflow() -> None:
+    """Integration test for the full sequential invoice workflow."""
+    session_service = InMemorySessionService()
+
+    session = session_service.create_session_sync(user_id="test_user", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    invoice_text = """
+    Invoice ID: INV-1002
+    Vendor: Acme Corp
+    Amount: $10,000
+    Date: 2026-06-30
+    """
+
+    message = types.Content(
+        role="user", parts=[types.Part.from_text(text=f"Please analyze this invoice:\n{invoice_text}")]
+    )
+
+    events = list(
+        runner.run(
+            new_message=message,
+            user_id="test_user",
+            session_id=session.id,
+            run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+        )
+    )
+
+    # Gather the text responses
+    full_response = ""
+    for event in events:
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.text:
+                    full_response += part.text
+
+    assert "VELNIX INITIAL INVESTIGATION REPORT" in full_response
+    assert "PARSED INVOICE FIELDS:" in full_response
+    assert "VENDOR INTELLIGENCE:" in full_response
+    assert "EVIDENCE SUMMARY:" in full_response
+    assert "FRAUD INTELLIGENCE:" in full_response
+

@@ -21,26 +21,143 @@ from google.genai import types
 from mcp import StdioServerParameters
 
 import os
+import sys
+import asyncio
+import time
+from google.genai.models import AsyncModels
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Monkey-patch AsyncModels to enforce rate limit (at least 13 seconds between calls)
+# to avoid exceeding the 5 requests-per-minute limit of the gemini-2.5-flash model on the free tier.
+_original_generate_content = AsyncModels.generate_content
+_original_generate_content_stream = AsyncModels.generate_content_stream
+_last_request_time = 0.0
+
+async def _patched_generate_content(self, *args, **kwargs):
+    global _last_request_time
+    now = time.time()
+    elapsed = now - _last_request_time
+    delay = 13.0 - elapsed
+    if delay > 0:
+        await asyncio.sleep(delay)
+    res = await _original_generate_content(self, *args, **kwargs)
+    _last_request_time = time.time()
+    return res
+
+async def _patched_generate_content_stream(self, *args, **kwargs):
+    global _last_request_time
+    now = time.time()
+    elapsed = now - _last_request_time
+    delay = 13.0 - elapsed
+    if delay > 0:
+        await asyncio.sleep(delay)
+    res = await _original_generate_content_stream(self, *args, **kwargs)
+    _last_request_time = time.time()
+    return res
+
+AsyncModels.generate_content = _patched_generate_content
+AsyncModels.generate_content_stream = _patched_generate_content_stream
+
 
 
 # =====================================================================
 # NATIVE MCP TOOLSET CONNECTION
 # =====================================================================
 
-erp_mcp_toolset = McpToolset(
-    connection_params=StdioServerParameters(
-        command="uv",
-        args=["run", "python", "app/mcp/server.py"],
-    )
-)
+from app.mcp.tool_factory import create_vendor_toolset
+erp_mcp_toolset = create_vendor_toolset()
 
 
 # =====================================================================
 # DETERMINISTIC AGENT TOOLS
 # =====================================================================
+
+def normalize_invoice_data(d: dict) -> dict:
+    if not isinstance(d, dict):
+        d = {}
+    import re
+    invoice_number = d.get("invoice_number") or d.get("invoice_id") or d.get("id") or d.get("number")
+    vendor_name = d.get("vendor_name") or d.get("vendor") or d.get("name")
+    invoice_date = d.get("invoice_date") or d.get("date")
+    due_date = d.get("due_date")
+    purchase_order_number = d.get("purchase_order_number") or d.get("purchase_order") or d.get("po_number") or d.get("po")
+    currency = d.get("currency")
+    
+    amount_val = d.get("invoice_amount") or d.get("amount")
+    invoice_amount = None
+    if amount_val is not None:
+        try:
+            if isinstance(amount_val, str):
+                cleaned = re.sub(r'[^\d.]', '', amount_val)
+                invoice_amount = float(cleaned)
+            else:
+                invoice_amount = float(amount_val)
+        except Exception:
+            pass
+            
+    payment_terms = d.get("payment_terms") or d.get("terms")
+    
+    return {
+        "invoice_number": str(invoice_number) if invoice_number is not None else None,
+        "vendor_name": str(vendor_name) if vendor_name is not None else None,
+        "invoice_date": str(invoice_date) if invoice_date is not None else None,
+        "due_date": str(due_date) if due_date is not None else None,
+        "purchase_order_number": str(purchase_order_number) if purchase_order_number is not None else None,
+        "currency": str(currency) if currency is not None else None,
+        "invoice_amount": invoice_amount,
+        "payment_terms": str(payment_terms) if payment_terms is not None else None,
+    }
+
+
+def normalize_vendor_profile(d: dict, inv: dict = None) -> dict:
+    if not isinstance(d, dict):
+        d = {}
+    
+    name = d.get("vendor_name") or d.get("name")
+    if not name and inv:
+        name = inv.get("vendor_name") or inv.get("vendor")
+    if not name:
+        name = "Unknown Vendor"
+        
+    status = d.get("vendor_status") or d.get("status") or "New"
+    
+    try:
+        trust_score = int(d.get("trust_score") or d.get("score") or 100)
+    except Exception:
+        trust_score = 100
+        
+    try:
+        total_inv = int(d.get("total_previous_invoices") or d.get("total_invoices") or d.get("previous_invoices") or d.get("total_previous") or 0)
+    except Exception:
+        total_inv = 0
+        
+    try:
+        avg_amt = float(d.get("average_invoice_amount") or d.get("average_amount") or d.get("avg_amount") or d.get("average_invoice") or 0.0)
+    except Exception:
+        avg_amt = 0.0
+        
+    last_date = d.get("last_invoice_date") or d.get("last_date") or d.get("last_invoice") or "N/A"
+    
+    try:
+        rejections = int(d.get("previous_rejections") or d.get("rejections") or d.get("rejections_count") or 0)
+    except Exception:
+        rejections = 0
+        
+    bank_change = d.get("last_bank_account_change") or d.get("bank_account_change") or d.get("last_bank_change") or "N/A"
+    
+    return {
+        "vendor_name": str(name),
+        "total_previous_invoices": total_inv,
+        "average_invoice_amount": avg_amt,
+        "last_invoice_date": str(last_date),
+        "previous_rejections": rejections,
+        "vendor_status": str(status),
+        "trust_score": trust_score,
+        "last_bank_account_change": str(bank_change),
+    }
+
 
 def parse_invoice_tool(invoice_text: str) -> dict:
     """Deterministic tool to parse raw invoice text and extract structured fields.
@@ -69,8 +186,12 @@ def calculate_risk_tool(invoice_data: dict, vendor_profile: dict) -> dict:
     from app.tools.invoice_tools import InvoiceData
     from app.tools.vendor_intelligence import VendorProfile
     from app.tools.risk_engine import calculate_risk
-    inv = InvoiceData(**invoice_data)
-    vend = VendorProfile(**vendor_profile)
+    
+    normalized_inv = normalize_invoice_data(invoice_data)
+    normalized_vend = normalize_vendor_profile(vendor_profile, normalized_inv)
+    
+    inv = InvoiceData(**normalized_inv)
+    vend = VendorProfile(**normalized_vend)
     assessment = calculate_risk(inv, vend)
     return assessment.model_dump()
 
@@ -90,8 +211,12 @@ def calculate_fraud_tool(invoice_data: dict, vendor_profile: dict, invoice_text:
     from app.tools.invoice_tools import InvoiceData
     from app.tools.vendor_intelligence import VendorProfile
     from app.tools.fraud_engine import calculate_fraud
-    inv = InvoiceData(**invoice_data)
-    vend = VendorProfile(**vendor_profile)
+    
+    normalized_inv = normalize_invoice_data(invoice_data)
+    normalized_vend = normalize_vendor_profile(vendor_profile, normalized_inv)
+    
+    inv = InvoiceData(**normalized_inv)
+    vend = VendorProfile(**normalized_vend)
     assessment = calculate_fraud(inv, vend, invoice_text, is_duplicate)
     return assessment.model_dump()
 
@@ -189,13 +314,13 @@ def compile_report_tool(
     )
 
     # 3. Format Evidence Summary block
-    pos_findings = risk_assessment.get("positive_findings", [])
-    risk_findings = risk_assessment.get("risk_findings", [])
-    evidence = risk_assessment.get("evidence", [])
+    pos_findings = risk_assessment.get("positive_findings") or []
+    risk_findings = risk_assessment.get("risk_findings") or []
+    evidence = risk_assessment.get("evidence") or []
     
     pos_findings_lines = "\n  ".join(f"- {f}" for f in pos_findings) if pos_findings else "  - None"
     risk_findings_lines = "\n  ".join(f"- {f}" for f in risk_findings) if risk_findings else "  - None"
-    evidence_lines = "\n  ".join(f"- {f}" for f in evidence)
+    evidence_lines = "\n  ".join(f"- {f}" for f in evidence) if evidence else "  - None"
 
     evidence_block = (
         "--------------------------------------------------\n"
@@ -221,7 +346,7 @@ def compile_report_tool(
     )
 
     # 4. Format Fraud Intelligence block
-    fraud_flags = fraud_assessment.get("fraud_flags", [])
+    fraud_flags = fraud_assessment.get("fraud_flags") or []
     fraud_flags_lines = "\n  ".join(f"- {f}" for f in fraud_flags) if fraud_flags else "  - None"
 
     fraud_block = (
@@ -240,7 +365,7 @@ def compile_report_tool(
         fraud_assessment.get("confidence_level"),
         "YES" if fraud_assessment.get("investigation_required") else "NO",
         fraud_flags_lines.replace("\n", "\n    "),
-        fraud_assessment.get("explanation").replace("\n", "\n    ")
+        (fraud_assessment.get("explanation") or "").replace("\n", "\n    ")
     )
 
     # 5. Format final report
@@ -279,9 +404,10 @@ def compile_report_tool(
 
 invoice_analysis_agent = Agent(
     name="invoice_analysis_agent",
+    mode="single_turn",
     description="Extracts structured invoice fields (invoice number, vendor name, amount, PO, payment terms, dates, currency) from raw text.",
     model=Gemini(
-        model="gemini-flash-latest",
+        model="gemini-3.1-flash-lite",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are the Invoice Analysis Agent.
@@ -293,9 +419,10 @@ Do not calculate risk or fraud, and do not look up vendor profiles.""",
 
 vendor_intelligence_agent = Agent(
     name="vendor_intelligence_agent",
+    mode="single_turn",
     description="Retrieves the historical vendor profile and trust metrics for a given vendor name using the local ERP MCP server.",
     model=Gemini(
-        model="gemini-flash-latest",
+        model="gemini-3.1-flash-lite",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are the Vendor Intelligence Agent.
@@ -308,9 +435,10 @@ Do not parse invoices or calculate risk or fraud.""",
 
 risk_assessment_agent = Agent(
     name="risk_assessment_agent",
+    mode="single_turn",
     description="Evaluates the risk score, recommendation, and positive/risk findings of an invoice against the vendor profile.",
     model=Gemini(
-        model="gemini-flash-latest",
+        model="gemini-3.1-flash-lite",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are the Risk Assessment Agent.
@@ -323,9 +451,10 @@ Do not parse invoices or run fraud checks.""",
 
 fraud_intelligence_agent = Agent(
     name="fraud_intelligence_agent",
+    mode="single_turn",
     description="Evaluates an invoice for potential fraud flags (duplicates, recent bank changes, urgent requests, extreme deviations) using the local ERP MCP server.",
     model=Gemini(
-        model="gemini-flash-latest",
+        model="gemini-3.1-flash-lite",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are the Fraud Intelligence Agent.
@@ -339,9 +468,10 @@ If needed, you can submit results using the MCP tool `submit_investigation_resul
 
 final_decision_agent = Agent(
     name="final_decision_agent",
+    mode="single_turn",
     description="Compiles and formats all analysis inputs into the final branded executive investigation report.",
     model=Gemini(
-        model="gemini-flash-latest",
+        model="gemini-3.1-flash-lite",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are the Final Decision Agent.
@@ -360,18 +490,18 @@ Do not perform any scoring or parsing calculations yourself.""",
 root_agent = Agent(
     name="velnix_root_agent",
     model=Gemini(
-        model="gemini-flash-latest",
+        model="gemini-3.1-flash-lite",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are Velnix, an AI Finance Intelligence Platform for enterprise Accounts Payable teams.
 Your primary objective is to investigate vendor invoices to determine whether they should be trusted.
 
-When a user submits an invoice or asks to analyze an invoice, you MUST coordinate the workflow step-by-step using your sub-agents:
-1. Transfer to `invoice_analysis_agent` with the raw invoice text to extract structured invoice data.
-2. Transfer to `vendor_intelligence_agent` with the extracted vendor name to load the vendor profile from the MCP server.
-3. Transfer to `risk_assessment_agent` with the invoice data and vendor profile to evaluate the risk score.
-4. Transfer to `fraud_intelligence_agent` with the invoice data, vendor profile, and raw invoice text to check for fraud indicators (leveraging the MCP server for duplicate verification).
-5. Transfer to `final_decision_agent` to compile all four structures (invoice data, vendor profile, risk assessment, and fraud assessment) plus the length of the raw invoice text into the final branded report.
+When a user submits an invoice or asks to analyze an invoice, you MUST coordinate the workflow step-by-step:
+1. Call `invoice_analysis_agent` with the raw invoice text to extract structured invoice data.
+2. Call `vendor_intelligence_agent` with the extracted vendor name to load the vendor profile from the MCP server.
+3. Call `risk_assessment_agent` with the invoice data and vendor profile to evaluate the risk score.
+4. Call `fraud_intelligence_agent` with the invoice data, vendor profile, and raw invoice text to check for fraud indicators (leveraging the MCP server for duplicate verification).
+5. Call `final_decision_agent` to compile all four structures (invoice data, vendor profile, risk assessment, and fraud assessment) plus the length of the raw invoice text into the final branded report.
 6. Return the resulting branded VELNIX INITIAL INVESTIGATION REPORT verbatim to the user.
 
 If a user asks a general question (like 'Why is the sky blue?'), answer it directly. Only invoke the invoice workflow when requested to investigate or analyze an invoice.""",
