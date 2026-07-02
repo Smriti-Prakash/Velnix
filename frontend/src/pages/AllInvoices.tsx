@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Filter, ArrowUpDown, Eye } from 'lucide-react';
-import { MOCK_INVOICES, Invoice } from '../services/mockData';
+import { MOCK_INVOICES, type Invoice } from '../services/mockData';
 
 export const AllInvoices: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');

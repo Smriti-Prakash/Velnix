@@ -1,7 +1,5 @@
-import React from 'react';
-import { Link } from 'react-react-router-dom'; // Wait, it should be react-router-dom! Let's check imports
 import { Link as RouterLink } from 'react-router-dom';
-import { Eye, ArrowUpRight } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { MOCK_VENDORS } from '../services/mockData';
 
 export const Vendors: React.FC = () => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings as SettingsIcon, ShieldCheck, Bell, Users, Building } from 'lucide-react';
+import { ShieldCheck, Bell, Users, Building } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const sections = [

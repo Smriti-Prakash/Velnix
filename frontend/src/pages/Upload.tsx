@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, File, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { UploadCloud, File, CheckCircle2 } from 'lucide-react';
 
 export const Upload: React.FC = () => {
   const [dragActive, setDragActive] = useState(false);

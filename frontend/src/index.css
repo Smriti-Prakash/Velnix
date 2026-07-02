@@ -1,9 +1,24 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  body {
-    @apply bg-slate-50 text-slate-900 min-h-screen font-sans;
-  }
+@theme {
+  --color-enterprise-50: #f8fafc;
+  --color-enterprise-100: #f1f5f9;
+  --color-enterprise-200: #e2e8f0;
+  --color-enterprise-300: #cbd5e1;
+  --color-enterprise-400: #94a3b8;
+  --color-enterprise-500: #64748b;
+  --color-enterprise-600: #475569;
+  --color-enterprise-700: #334155;
+  --color-enterprise-800: #1e293b;
+  --color-enterprise-900: #0f172a;
+  --color-enterprise-950: #020617;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #0f172a;
+  min-height: 100vh;
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, UserCheck, Inbox, ShieldAlert, Award, FileText } from 'lucide-react';
+import { ArrowLeft, UserCheck } from 'lucide-react';
 import { MOCK_VENDORS, MOCK_INVOICES } from '../services/mockData';
 
 export const VendorDetails: React.FC = () => {

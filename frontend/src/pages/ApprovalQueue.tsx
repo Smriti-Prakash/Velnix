@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Eye, CheckCircle2, ShieldAlert } from 'lucide-react';
-import { MOCK_INVOICES, Invoice } from '../services/mockData';
+import { Eye, CheckCircle2, ShieldAlert, Search, RotateCcw } from 'lucide-react';
+import { MOCK_INVOICES } from '../services/mockData';
 
 export const ApprovalQueue: React.FC = () => {
-  // Filters for invoices requiring action (Pending, Review, Investigate)
-  const queueInvoices = MOCK_INVOICES.filter(
-    invoice => invoice.status === 'Pending' || invoice.status === 'Review' || invoice.status === 'Investigate'
-  );
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [riskFilter, setRiskFilter] = useState<string>('All');
+  const [timePeriod, setTimePeriod] = useState<string>('All');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
 
   // Priority ranking for sorting: High (3), Medium (2), Low (1)
   const getPriorityWeight = (priority: string) => {
@@ -19,8 +22,89 @@ export const ApprovalQueue: React.FC = () => {
     }
   };
 
+  const matchesStatus = (status: string, rec: string, filter: string) => {
+    if (filter === 'All') return true;
+    if (filter === 'Pending Approval') return status === 'Pending';
+    if (filter === 'Needs Review') return status === 'Review' || status === 'Investigate' || rec === 'REVIEW';
+    if (filter === 'Approved') return status === 'Approved';
+    if (filter === 'Rejected') return status === 'Rejected';
+    return true;
+  };
+
+  const matchesRisk = (score: number, filter: string) => {
+    if (filter === 'All') return true;
+    if (filter === 'Low') return score <= 30;
+    if (filter === 'Medium') return score > 30 && score <= 60;
+    if (filter === 'High') return score > 60 && score <= 85;
+    if (filter === 'Critical') return score > 85;
+    return true;
+  };
+
+  const isWithinPeriod = (dateStr: string, period: string, from: string, to: string): boolean => {
+    if (period === 'All') return true;
+    
+    const invDate = new Date(dateStr);
+    const today = new Date('2026-07-02'); // Fixed mock context date
+    
+    if (isNaN(invDate.getTime())) return false;
+    
+    const diffTime = today.getTime() - invDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    switch (period) {
+      case 'Today':
+        return dateStr === '2026-07-02';
+      case 'Last 7 Days':
+        return diffDays >= 0 && diffDays <= 7;
+      case 'Last 30 Days':
+        return diffDays >= 0 && diffDays <= 30;
+      case 'Last 90 Days':
+        return diffDays >= 0 && diffDays <= 90;
+      case 'This Month':
+        return invDate.getFullYear() === 2026 && invDate.getMonth() === 6; // July (6)
+      case 'Last Month':
+        return invDate.getFullYear() === 2026 && invDate.getMonth() === 5; // June (5)
+      case 'This Year':
+        return invDate.getFullYear() === 2026;
+      case 'Custom Range':
+        const fromD = from ? new Date(from) : null;
+        const toD = to ? new Date(to) : null;
+        if (fromD && invDate < fromD) return false;
+        if (toD && invDate > toD) return false;
+        return true;
+      default:
+        return true;
+    }
+  };
+
+  // Reset all filters
+  const resetFilters = () => {
+    setSearchTerm('');
+    setPriorityFilter('All');
+    setStatusFilter('All');
+    setRiskFilter('All');
+    setTimePeriod('All');
+    setFromDate('');
+    setToDate('');
+  };
+
+  // Filter list of all invoices based on user's selected filters
+  const filteredInvoices = MOCK_INVOICES.filter((invoice) => {
+    const matchesSearch = 
+      invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (invoice.purchaseOrderNumber && invoice.purchaseOrderNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+    const matchesPrio = priorityFilter === 'All' || invoice.priority === priorityFilter;
+    const matchesStat = matchesStatus(invoice.status, invoice.recommendation, statusFilter);
+    const matchesRsk = matchesRisk(invoice.riskScore, riskFilter);
+    const matchesTime = isWithinPeriod(invoice.invoiceDate, timePeriod, fromDate, toDate);
+
+    return matchesSearch && matchesPrio && matchesStat && matchesRsk && matchesTime;
+  });
+
   // Sort by priority weight descending
-  const sortedInvoices = [...queueInvoices].sort(
+  const sortedInvoices = [...filteredInvoices].sort(
     (a, b) => getPriorityWeight(b.priority) - getPriorityWeight(a.priority)
   );
 
@@ -52,14 +136,135 @@ export const ApprovalQueue: React.FC = () => {
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-fadeIn">
+      {/* Title Header Card */}
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Action Required Queue</h2>
-          <p className="text-xs text-slate-500 mt-1">Invoices awaiting analysis review or analyst action, ordered by priority</p>
+          <p className="text-xs text-slate-500 mt-1">Invoices awaiting review, filterable by priority, risk level, status and date periods</p>
         </div>
         <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full border border-amber-200">
-          {sortedInvoices.length} Items Awaiting Review
+          {MOCK_INVOICES.filter(i => i.status === 'Pending' || i.status === 'Review' || i.status === 'Investigate').length} Items Total Queue
         </span>
+      </div>
+
+      {/* Dynamic Filter Controls Bar */}
+      <div className="bg-slate-50 p-6 border-b border-slate-200 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search ID, Vendor, PO..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-slate-700 font-medium placeholder-slate-400"
+            />
+          </div>
+
+          {/* Priority Select */}
+          <div>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs text-slate-700 font-medium"
+            >
+              <option value="All">All Priorities</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+
+          {/* Status Select */}
+          <div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs text-slate-700 font-medium"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Pending Approval">Pending Approval</option>
+              <option value="Needs Review">Needs Review</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+
+          {/* Risk Level Select */}
+          <div>
+            <select
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs text-slate-700 font-medium"
+            >
+              <option value="All">All Risk Levels</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+
+          {/* Time Period Select */}
+          <div>
+            <select
+              value={timePeriod}
+              onChange={(e) => setTimePeriod(e.target.value)}
+              className="w-full border border-slate-200 rounded px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs text-slate-700 font-medium"
+            >
+              <option value="All">All Time Periods</option>
+              <option value="Today">Today</option>
+              <option value="Last 7 Days">Last 7 Days</option>
+              <option value="Last 30 Days">Last 30 Days</option>
+              <option value="Last 90 Days">Last 90 Days</option>
+              <option value="This Month">This Month</option>
+              <option value="Last Month">Last Month</option>
+              <option value="This Year">This Year</option>
+              <option value="Custom Range">Custom Range...</option>
+            </select>
+          </div>
+
+        </div>
+
+        {/* Custom Range Date Pickers (Conditional) */}
+        {timePeriod === 'Custom Range' && (
+          <div className="flex items-center space-x-4 p-3 bg-white rounded border border-slate-200 animate-slideDown">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-slate-500 font-semibold">From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="border border-slate-200 rounded px-2.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs font-semibold text-slate-700"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-slate-500 font-semibold">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="border border-slate-200 rounded px-2.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs font-semibold text-slate-700"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Reset Filters & Count summary */}
+        <div className="flex items-center justify-between border-t border-slate-200/60 pt-3">
+          <span className="text-xs text-slate-400">
+            Showing {sortedInvoices.length} of {MOCK_INVOICES.length} total entries
+          </span>
+          <button
+            onClick={resetFilters}
+            className="flex items-center space-x-1.5 text-xs text-rose-600 hover:text-rose-800 transition-colors font-semibold"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>Reset Filters</span>
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
