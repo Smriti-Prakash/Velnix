@@ -443,7 +443,8 @@ risk_assessment_agent = Agent(
     ),
     instruction="""You are the Risk Assessment Agent.
 Your sole responsibility is to calculate the risk score and make an AP recommendation.
-You must use the calculate_risk_tool, passing the extracted invoice fields and vendor profile.
+You must read the input request and history to locate the extracted invoice data and the actual vendor profile details retrieved by the vendor_intelligence_agent.
+You must use the calculate_risk_tool, passing the extracted invoice fields and the actual retrieved vendor profile details. Do not use default or mock vendor profile values (such as New status or 0 invoices) when a historical vendor profile has been retrieved.
 Return the resulting risk assessment dictionary.
 Do not parse invoices or run fraud checks.""",
     tools=[calculate_risk_tool],
@@ -460,7 +461,8 @@ fraud_intelligence_agent = Agent(
     instruction="""You are the Fraud Intelligence Agent.
 Your sole responsibility is to run the fraud detection engine.
 You must first invoke the `find_duplicate_invoice` tool on the connected MCP server to verify if the invoice number is a duplicate.
-Then call `calculate_fraud_tool` passing the duplicate check result, along with the invoice data, vendor profile, and raw text.
+Then locate the actual vendor profile details retrieved by the vendor_intelligence_agent in the conversation history (do not use default or mock vendor profile values).
+Call `calculate_fraud_tool` passing the duplicate check result, along with the invoice data, the actual retrieved vendor profile details, and the raw text.
 Return the resulting fraud assessment dictionary.
 If needed, you can submit results using the MCP tool `submit_investigation_result` or view pending items using `list_pending_invoices`.""",
     tools=[erp_mcp_toolset, calculate_fraud_tool],
@@ -476,7 +478,8 @@ final_decision_agent = Agent(
     ),
     instruction="""You are the Final Decision Agent.
 Your sole responsibility is to synthesize all findings into the final branded VELNIX INITIAL INVESTIGATION REPORT.
-You must use the compile_report_tool to format the inputs (parsed invoice, vendor intelligence, risk assessment, fraud assessment) and raw text length into the branded report.
+You must read the history to locate the extracted invoice data, the retrieved vendor profile, the risk assessment, and the fraud assessment.
+You must use the compile_report_tool to format these four inputs (parsed invoice, vendor intelligence, risk assessment, fraud assessment) and raw text length into the branded report.
 Return the complete formatted text of the report.
 Do not perform any scoring or parsing calculations yourself.""",
     tools=[compile_report_tool],
@@ -499,8 +502,8 @@ Your primary objective is to investigate vendor invoices to determine whether th
 When a user submits an invoice or asks to analyze an invoice, you MUST coordinate the workflow step-by-step:
 1. Call `invoice_analysis_agent` with the raw invoice text to extract structured invoice data.
 2. Call `vendor_intelligence_agent` with the extracted vendor name to load the vendor profile from the MCP server.
-3. Call `risk_assessment_agent` with the invoice data and vendor profile to evaluate the risk score.
-4. Call `fraud_intelligence_agent` with the invoice data, vendor profile, and raw invoice text to check for fraud indicators (leveraging the MCP server for duplicate verification).
+3. Call `risk_assessment_agent` passing BOTH the extracted invoice data and the actual retrieved vendor profile details (vendor_name, status, trust score, average amount, rejections, total invoices, and last bank account change) to evaluate the risk score.
+4. Call `fraud_intelligence_agent` passing BOTH the extracted invoice data and the actual retrieved vendor profile details, along with the raw invoice text, to check for fraud indicators (leveraging the MCP server for duplicate verification).
 5. Call `final_decision_agent` to compile all four structures (invoice data, vendor profile, risk assessment, and fraud assessment) plus the length of the raw invoice text into the final branded report.
 6. Return the resulting branded VELNIX INITIAL INVESTIGATION REPORT verbatim to the user.
 
