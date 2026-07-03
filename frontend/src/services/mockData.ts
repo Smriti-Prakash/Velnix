@@ -37,7 +37,47 @@ export interface AuditLog {
   reason: string;
 }
 
+const LOCAL_INVOICES_KEY = "velnix_custom_invoices";
+const LOCAL_VENDORS_KEY = "velnix_custom_vendors";
+
+const getStoredInvoices = (): Invoice[] => {
+  try {
+    const stored = localStorage.getItem(LOCAL_INVOICES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const getStoredVendors = (): Vendor[] => {
+  try {
+    const stored = localStorage.getItem(LOCAL_VENDORS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const addCustomInvoice = (inv: Invoice) => {
+  const stored = getStoredInvoices();
+  if (!stored.some(i => i.id === inv.id)) {
+    const updated = [inv, ...stored];
+    localStorage.setItem(LOCAL_INVOICES_KEY, JSON.stringify(updated));
+    MOCK_INVOICES.unshift(inv);
+  }
+};
+
+export const addCustomVendor = (vendor: Vendor) => {
+  const stored = getStoredVendors();
+  if (!stored.some(v => v.name === vendor.name)) {
+    const updated = [vendor, ...stored];
+    localStorage.setItem(LOCAL_VENDORS_KEY, JSON.stringify(updated));
+    MOCK_VENDORS.unshift(vendor);
+  }
+};
+
 export const MOCK_INVOICES: Invoice[] = [
+  ...getStoredInvoices(),
   {
     id: "INV-1002",
     vendorName: "Acme Corp",
@@ -121,6 +161,7 @@ export const MOCK_INVOICES: Invoice[] = [
 ];
 
 export const MOCK_VENDORS: Vendor[] = [
+  ...getStoredVendors(),
   {
     name: "Acme Corp",
     status: "Trusted",
