@@ -21,10 +21,22 @@ own connection, executes a single logical query, and closes the connection.
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
 from app.erp.database import get_connection
 from app.erp.models import GoodsReceipt, InvoiceHistory, PurchaseOrder, Vendor
+
+# ---------------------------------------------------------------------------
+# Optional profiler hook — set by the upload handler for the current request.
+# Uses thread-local storage so concurrent requests don't interfere.
+# ---------------------------------------------------------------------------
+_profiler_ctx: threading.local = threading.local()
+
+
+def _get_profiler():
+    """Return the PipelineProfiler attached to the current request thread, or None."""
+    return getattr(_profiler_ctx, "profiler", None)
 
 
 # ---------------------------------------------------------------------------
@@ -40,13 +52,18 @@ def fetch_vendor_by_name(vendor_name: str) -> Optional[Vendor]:
     Returns:
         A :class:`Vendor` instance or ``None`` if not found.
     """
+    _prof = _get_profiler()
+    _sq = _prof.record_sqlite("fetch_vendor_by_name", "vendor_lookup") if _prof else None
     conn = get_connection()
     try:
         row = conn.execute(
             "SELECT * FROM vendors WHERE LOWER(vendor_name) = LOWER(?)",
             (vendor_name.strip(),),
         ).fetchone()
-        return Vendor.from_row(row) if row else None
+        result = Vendor.from_row(row) if row else None
+        if _sq:
+            _sq.finish(hit=result is not None)
+        return result
     finally:
         conn.close()
 
@@ -225,13 +242,18 @@ def check_duplicate_invoice(invoice_number: str) -> bool:
     Returns:
         Boolean indicating whether the invoice is a known duplicate.
     """
+    _prof = _get_profiler()
+    _sq = _prof.record_sqlite("check_duplicate_invoice", "duplicate_check") if _prof else None
     conn = get_connection()
     try:
         row = conn.execute(
             "SELECT 1 FROM invoice_history WHERE UPPER(invoice_number) = UPPER(?)",
             (invoice_number.strip(),),
         ).fetchone()
-        return row is not None
+        is_dup = row is not None
+        if _sq:
+            _sq.finish(hit=is_dup)
+        return is_dup
     finally:
         conn.close()
 

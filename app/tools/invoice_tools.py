@@ -13,8 +13,17 @@
 # limitations under the License.
 
 import re
+import threading
 from typing import Optional, List
 from pydantic import BaseModel
+
+
+# Optional thread-local profiler hook (set by upload handler, None otherwise)
+_profiler_ctx: threading.local = threading.local()
+
+
+def _get_profiler():
+    return getattr(_profiler_ctx, "profiler", None)
 
 
 class InvoiceData(BaseModel):
@@ -35,6 +44,8 @@ def parse_invoice_with_gemini(invoice_text: str) -> InvoiceData:
     Falls back to regex-based extraction if API calls fail or credentials are missing.
     """
     import os
+    import logging
+    _diag = logging.getLogger("velnix.diag")
     try:
         api_key = os.environ.get("GEMINI_API_KEY")
         if api_key:
@@ -48,6 +59,16 @@ def parse_invoice_with_gemini(invoice_text: str) -> InvoiceData:
                 "and purchase_order_number is extracted separately. Do not map Order ID into purchase_order_number.\n\n"
                 f"Raw invoice text:\n{invoice_text}"
             )
+
+            # --- Profiler instrumentation ---
+            _prof = _get_profiler()
+            _gcall = _prof.record_gemini_call(
+                caller="parse_invoice_with_gemini",
+                prompt_chars=len(prompt),
+                model="gemini-2.5-flash",
+            ) if _prof else None
+            # --------------------------------
+
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
@@ -56,14 +77,28 @@ def parse_invoice_with_gemini(invoice_text: str) -> InvoiceData:
                     response_schema=InvoiceData,
                 ),
             )
+
+            if _gcall:
+                _gcall.finish()
+
             import json
             parsed_json = json.loads(response.text)
-            return InvoiceData(**parsed_json)
-    except Exception:
-        # Silently log/ignore and fall back to regex
-        pass
+            result = InvoiceData(**parsed_json)
+            _diag.info(
+                "[VENDOR_DIAG] Stage 1 (Gemini parse): raw vendor_name extracted = %r  "
+                "(repr shows leading/trailing whitespace or hidden chars)",
+                result.vendor_name,
+            )
+            return result
+    except Exception as exc:
+        _diag.warning("[VENDOR_DIAG] Stage 1 (Gemini parse): FAILED with %s — falling back to regex", exc)
 
-    return parse_invoice(invoice_text)
+    result = parse_invoice(invoice_text)
+    _diag.info(
+        "[VENDOR_DIAG] Stage 1 (regex fallback parse): raw vendor_name extracted = %r",
+        result.vendor_name,
+    )
+    return result
 
 
 def parse_invoice(invoice_text: str) -> InvoiceData:

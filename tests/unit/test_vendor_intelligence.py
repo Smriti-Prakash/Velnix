@@ -12,8 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
+import app.erp.database as db_module
 from app.tools.vendor_intelligence import get_vendor_profile
 from app.tools.invoice_tools import parse_invoice, analyze_invoice
+
+
+@pytest.fixture(autouse=True)
+def tmp_erp_db(tmp_path, monkeypatch):
+    """Redirect the ERP database to a fresh temp file for each test."""
+    db_file = str(tmp_path / "test_erp.db")
+    monkeypatch.setattr(db_module, "DB_PATH", db_file)
+    # Patch get_connection inside queries so it uses the temp path too
+    import app.erp.queries as q_module
+    monkeypatch.setattr(q_module, "get_connection", db_module.get_connection)
+    db_module.init_db()
+
 
 
 def test_get_vendor_profile_existing():

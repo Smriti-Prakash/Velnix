@@ -122,7 +122,7 @@ def calculate_fraud(
 
     # 5. New Vendor Requesting Urgent Payment Check
     is_urgent_new = False
-    if vendor.vendor_status == "New":
+    if getattr(vendor, "vendor_found", False) and vendor.vendor_status == "New":
         urgency_keywords = [
             "urgent",
             "immediate",
@@ -137,6 +137,7 @@ def calculate_fraud(
         )
         if has_urgency:
             is_urgent_new = True
+
 
     if is_urgent_new:
         score += 25

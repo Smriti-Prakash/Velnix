@@ -1,4 +1,4 @@
-﻿# Copyright 2026 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,10 +45,15 @@ def get_vendor_profile(vendor_name: str, role: str = "Finance Analyst") -> dict:
 
     vendor = fetch_vendor_by_name(vendor_name)
     if vendor:
-        return vendor.to_dict()
+        res = vendor.to_dict()
+        res["vendor_found"] = True
+        res["vendor_finding"] = f"Vendor {vendor.vendor_name} was found in the ERP vendor master and is classified as a {vendor.vendor_status} vendor."
+        return res
 
     # Graceful fallback for unknown / newly onboarded vendors
     return {
+        "vendor_found": False,
+        "vendor_finding": "Vendor was not found in the ERP vendor master. Vendor verification could not be completed.",
         "vendor_id": None,
         "vendor_name": vendor_name or "Unknown Vendor",
         "vendor_status": "New",
@@ -60,6 +65,7 @@ def get_vendor_profile(vendor_name: str, role: str = "Finance Analyst") -> dict:
         "bank_account": "N/A",
         "risk_level": "Low",
     }
+
 
 
 # ---------------------------------------------------------------------------

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import csv
 import os
 from typing import Optional
 from pydantic import BaseModel
@@ -27,17 +26,15 @@ class VendorProfile(BaseModel):
     vendor_status: str
     trust_score: int
     last_bank_account_change: str
+    vendor_found: bool = True
+    vendor_finding: str = ""
 
-
-# Construct the CSV path relative to the file location to ensure robust imports
-current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH = os.path.join(current_dir, "data", "vendors.csv")
 
 
 def get_vendor_profile(vendor_name: str) -> VendorProfile:
-    """Retrieves the vendor profile from the CSV database.
+    """Retrieves the vendor profile from the SQLite ERP database.
 
-    If the vendor is not in the database, returns a default 'New' profile.
+    If the vendor is not in the database, returns a default 'New' profile with vendor_found=False.
 
     Args:
         vendor_name: The name of the vendor to search for.
@@ -45,33 +42,34 @@ def get_vendor_profile(vendor_name: str) -> VendorProfile:
     Returns:
         A VendorProfile Pydantic model.
     """
-    normalized_target = vendor_name.lower().strip() if vendor_name else ""
+    normalized_target = vendor_name.strip() if vendor_name else ""
 
-    if normalized_target and os.path.exists(CSV_PATH):
+    if normalized_target:
         try:
-            with open(CSV_PATH, mode="r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    row_vendor = row.get("Vendor Name", "").lower().strip()
-                    if row_vendor == normalized_target:
-                        return VendorProfile(
-                            vendor_name=row.get("Vendor Name", "").strip(),
-                            total_previous_invoices=int(
-                                row.get("Total Previous Invoices", 0)
-                            ),
-                            average_invoice_amount=float(
-                                row.get("Average Invoice Amount", 0.0)
-                            ),
-                            last_invoice_date=row.get(
-                                "Last Invoice Date", "N/A"
-                            ).strip(),
-                            previous_rejections=int(row.get("Previous Rejections", 0)),
-                            vendor_status=row.get("Vendor Status", "New").strip(),
-                            trust_score=int(row.get("Trust Score", 50)),
-                            last_bank_account_change=row.get(
-                                "Last Bank Account Change", "N/A"
-                            ).strip(),
-                        )
+            from app.erp.queries import fetch_vendor_by_name, fetch_invoice_history_by_vendor_name
+            vendor = fetch_vendor_by_name(normalized_target)
+            if vendor:
+                # Find last invoice date from history
+                history = fetch_invoice_history_by_vendor_name(normalized_target)
+                last_invoice_date = "N/A"
+                if history:
+                    # History is ordered newest-first
+                    last_invoice_date = history[0].invoice_date
+                
+                vendor_finding = f"Vendor {vendor.vendor_name} was found in the ERP vendor master and is classified as a {vendor.vendor_status} vendor."
+                
+                return VendorProfile(
+                    vendor_name=vendor.vendor_name,
+                    total_previous_invoices=vendor.total_previous_invoices,
+                    average_invoice_amount=vendor.average_invoice_amount,
+                    last_invoice_date=last_invoice_date,
+                    previous_rejections=vendor.previous_rejections,
+                    vendor_status=vendor.vendor_status,
+                    trust_score=vendor.trust_score,
+                    last_bank_account_change=vendor.last_bank_account_change or "N/A",
+                    vendor_found=True,
+                    vendor_finding=vendor_finding,
+                )
         except Exception:
             pass
 
@@ -85,4 +83,7 @@ def get_vendor_profile(vendor_name: str) -> VendorProfile:
         vendor_status="New",
         trust_score=50,
         last_bank_account_change="N/A",
+        vendor_found=False,
+        vendor_finding="Vendor was not found in the ERP vendor master. Vendor verification could not be completed.",
     )
+

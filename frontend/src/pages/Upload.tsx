@@ -265,13 +265,13 @@ export const Upload: React.FC = () => {
             ref={fileInputRef}
             type="file" 
             className="hidden"
-            accept=".pdf,.png,.jpg,.jpeg"
+            accept=".pdf,.png,.jpg,.jpeg,.csv"
             onChange={handleChange}
           />
           <UploadCloud className="h-12 w-12 text-slate-400" />
           <div>
             <p className="text-sm font-semibold text-slate-700">Drag and drop file here</p>
-            <p className="text-xs text-slate-400 mt-1">Supports PDF, PNG, JPG, JPEG up to 10MB</p>
+            <p className="text-xs text-slate-400 mt-1">Supports PDF, PNG, JPG, JPEG, CSV up to 10MB</p>
           </div>
           <button 
             onClick={onButtonClick}

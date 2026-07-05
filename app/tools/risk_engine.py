@@ -58,7 +58,10 @@ def calculate_risk(invoice: InvoiceData, vendor: VendorProfile) -> RiskAssessmen
     evidence_items.append(f"Last Bank Account Change: {vendor.last_bank_account_change}")
 
     # 1. Vendor Status Check
-    if vendor.vendor_status == "Watchlist":
+    if not getattr(vendor, "vendor_found", False):
+        score += 30
+        risks.append("Vendor was not found in the ERP vendor master database.")
+    elif vendor.vendor_status == "Watchlist":
         score += 40
         risks.append(f"Vendor is on corporate WATCHLIST (Trust Score: {vendor.trust_score}/100).")
     elif vendor.vendor_status == "New":
@@ -66,6 +69,7 @@ def calculate_risk(invoice: InvoiceData, vendor: VendorProfile) -> RiskAssessmen
         risks.append("Vendor is NEW/UNVERIFIED in the master database (no prior transaction history).")
     elif vendor.vendor_status == "Trusted":
         positive.append(f"Vendor status is verified and TRUSTED (Trust Score: {vendor.trust_score}/100).")
+
 
     # 2. Vendor Trust Score Penalty Check
     if vendor.trust_score < 70:
