@@ -1,4 +1,4 @@
-﻿# Copyright 2026 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -234,3 +234,54 @@ def check_duplicate_invoice(invoice_number: str) -> bool:
         return row is not None
     finally:
         conn.close()
+
+
+def fetch_all_vendors() -> list[Vendor]:
+    """Return all Vendor records in the database."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM vendors ORDER BY vendor_name").fetchall()
+        return [Vendor.from_row(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def fetch_all_purchase_orders() -> list[PurchaseOrder]:
+    """Return all PurchaseOrder records in the database."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM purchase_orders ORDER BY purchase_date DESC").fetchall()
+        return [PurchaseOrder.from_row(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def fetch_all_goods_receipts() -> list[GoodsReceipt]:
+    """Return all GoodsReceipt records in the database."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM goods_receipts ORDER BY received_date DESC").fetchall()
+        return [GoodsReceipt.from_row(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def fetch_goods_receipt_by_grn(grn_number: str) -> Optional[GoodsReceipt]:
+    """Return the GoodsReceipt record matching *grn_number*.
+
+    Args:
+        grn_number: The alphanumeric GRN reference.
+
+    Returns:
+        A :class:`GoodsReceipt` instance or ``None`` if not found.
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM goods_receipts WHERE UPPER(goods_receipt_number) = UPPER(?)",
+            (grn_number.strip(),),
+        ).fetchone()
+        return GoodsReceipt.from_row(row) if row else None
+    finally:
+        conn.close()
+

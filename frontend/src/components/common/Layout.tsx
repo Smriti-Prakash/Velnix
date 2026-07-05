@@ -11,7 +11,9 @@ import {
   Upload,
   ShieldCheck,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  ShoppingCart,
+  Package
 } from 'lucide-react';
 import { useDevMode } from '../../context/DevModeContext';
 
@@ -25,10 +27,13 @@ export const Layout: React.FC = () => {
     { name: 'All Invoices', href: '/invoices', icon: FileText },
     { name: 'Upload Invoice', href: '/upload', icon: Upload },
     { name: 'Vendors', href: '/vendors', icon: Users },
+    { name: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
+    { name: 'Goods Receipts', href: '/goods-receipts', icon: Package },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Audit Logs', href: '/audit', icon: Scroll },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
+
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">

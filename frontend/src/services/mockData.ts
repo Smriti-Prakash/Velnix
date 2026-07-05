@@ -31,6 +31,50 @@ export interface Vendor {
   riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
 }
 
+export interface ErpVendor {
+  vendor_id: number;
+  vendor_name: string;
+  vendor_status: 'Trusted' | 'Watchlist' | 'New' | 'Suspended';
+  trust_score: number;
+  average_invoice_amount: number;
+  total_previous_invoices: number;
+  previous_rejections: number;
+  last_bank_account_change: string | null;
+  bank_account: string | null;
+  risk_level: 'Low' | 'Medium' | 'High';
+}
+
+export interface PurchaseOrder {
+  purchase_order_number: string;
+  vendor_id: number;
+  vendor_name: string;
+  approved_amount: number;
+  currency: string;
+  purchase_date: string;
+  status: 'Open' | 'Cancelled' | 'Closed';
+  expected_items: string;
+}
+
+export interface GoodsReceipt {
+  goods_receipt_number: string;
+  purchase_order_number: string;
+  vendor_id: number;
+  received_date: string;
+  received_quantity: number;
+  status: 'Complete' | 'Partial' | 'Pending';
+}
+
+export interface InvoiceHistoryRecord {
+  id: number;
+  invoice_number: string;
+  vendor_id: number;
+  vendor_name: string;
+  invoice_amount: number;
+  invoice_date: string;
+  status: 'Paid' | 'Rejected' | 'Pending';
+}
+
+
 export interface AuditLog {
   timestamp: string;
   invoiceNumber: string;

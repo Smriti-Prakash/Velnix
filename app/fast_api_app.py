@@ -122,6 +122,89 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     return {"status": "success"}
 
 
+# ---------------------------------------------------------------------------
+# ERP Data Management Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/erp/vendors")
+def get_erp_vendors():
+    """Retrieve all vendors from the ERP database."""
+    from app.erp.queries import fetch_all_vendors
+    vendors = fetch_all_vendors()
+    return [v.to_dict() for v in vendors]
+
+
+@app.get("/api/erp/vendors/{vendor_id}")
+def get_erp_vendor(vendor_id: int):
+    """Retrieve a specific vendor's profile from the ERP database by ID."""
+    from app.erp.queries import fetch_vendor_by_id
+    vendor = fetch_vendor_by_id(vendor_id)
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    return vendor.to_dict()
+
+
+@app.get("/api/erp/vendors/{vendor_id}/history")
+def get_erp_vendor_history(vendor_id: int):
+    """Retrieve historical invoices for a specific vendor by vendor ID."""
+    from app.erp.queries import fetch_invoice_history_by_vendor_id
+    history = fetch_invoice_history_by_vendor_id(vendor_id)
+    return [h.to_dict() for h in history]
+
+
+@app.get("/api/erp/vendors/{vendor_id}/purchase-orders")
+def get_erp_vendor_purchase_orders(vendor_id: int):
+    """Retrieve purchase orders associated with a specific vendor ID."""
+    from app.erp.queries import fetch_purchase_orders_by_vendor_id
+    pos = fetch_purchase_orders_by_vendor_id(vendor_id)
+    return [po.to_dict() for po in pos]
+
+
+@app.get("/api/erp/vendors/{vendor_id}/goods-receipts")
+def get_erp_vendor_goods_receipts(vendor_id: int):
+    """Retrieve goods receipts associated with a specific vendor ID."""
+    from app.erp.queries import fetch_goods_receipts_by_vendor_id
+    receipts = fetch_goods_receipts_by_vendor_id(vendor_id)
+    return [r.to_dict() for r in receipts]
+
+
+@app.get("/api/erp/purchase-orders")
+def get_erp_purchase_orders():
+    """Retrieve all purchase orders from the ERP database."""
+    from app.erp.queries import fetch_all_purchase_orders
+    pos = fetch_all_purchase_orders()
+    return [po.to_dict() for po in pos]
+
+
+@app.get("/api/erp/purchase-orders/{po_number}")
+def get_erp_purchase_order(po_number: str):
+    """Retrieve a specific purchase order from the ERP database by PO number."""
+    from app.erp.queries import fetch_purchase_order
+    po = fetch_purchase_order(po_number)
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase Order not found")
+    return po.to_dict()
+
+
+@app.get("/api/erp/goods-receipts")
+def get_erp_goods_receipts():
+    """Retrieve all goods receipts from the ERP database."""
+    from app.erp.queries import fetch_all_goods_receipts
+    receipts = fetch_all_goods_receipts()
+    return [r.to_dict() for r in receipts]
+
+
+@app.get("/api/erp/goods-receipts/{grn_number}")
+def get_erp_goods_receipt(grn_number: str):
+    """Retrieve a specific goods receipt from the ERP database by GRN."""
+    from app.erp.queries import fetch_goods_receipt_by_grn
+    receipt = fetch_goods_receipt_by_grn(grn_number)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Goods Receipt not found")
+    return receipt.to_dict()
+
+
+
 @app.post("/api/upload")
 async def upload_invoice(file: UploadFile = File(...)):
     filename = file.filename or ""
