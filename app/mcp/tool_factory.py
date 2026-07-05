@@ -60,12 +60,18 @@ class MockVendorToolset(BaseToolset):
     async def get_tools(self, readonly_context=None):
         from app.mcp.server import (
             get_vendor_profile,
+            get_purchase_order,
+            get_goods_receipt,
+            get_invoice_history,
             find_duplicate_invoice,
             submit_investigation_result,
             list_pending_invoices,
         )
         return [
             FunctionTool(get_vendor_profile),
+            FunctionTool(get_purchase_order),
+            FunctionTool(get_goods_receipt),
+            FunctionTool(get_invoice_history),
             FunctionTool(find_duplicate_invoice),
             FunctionTool(submit_investigation_result),
             FunctionTool(list_pending_invoices),

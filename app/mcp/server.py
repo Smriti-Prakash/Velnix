@@ -1,4 +1,4 @@
-# Copyright 2026 Google LLC
+﻿# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,57 +12,150 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import csv
+"""Velnix MCP server exposing ERP tools to the AI agent pipeline.
+
+All database interactions are delegated to :mod:`app.erp.queries` so that
+no SQL is embedded directly in this module.
+"""
+
 import os
 from mcp.server.fastmcp import FastMCP
 from app.security import verify_permission
 
 mcp_server = FastMCP("Velnix ERP Server")
 
-# Paths relative to the app folder
-current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HISTORY_CSV_PATH = os.path.join(current_dir, "data", "invoice_history.csv")
 
+# ---------------------------------------------------------------------------
+# Vendor tools
+# ---------------------------------------------------------------------------
 
 @mcp_server.tool()
 def get_vendor_profile(vendor_name: str, role: str = "Finance Analyst") -> dict:
-    """Retrieves the historical vendor profile and trust metrics for a given vendor name.
+    """Retrieves the vendor profile and trust metrics from the ERP database.
+
+    Looks up the vendor by name in the SQLite vendors table.  Returns a
+    structured profile dict, or a default 'New vendor' profile if not found.
 
     Args:
-        vendor_name: The name of the vendor to search for.
+        vendor_name: The display name of the vendor to look up.
         role: The role name requesting the action (default: Finance Analyst).
     """
     verify_permission(role, "view_profile")
-    from app.tools.vendor_intelligence import get_vendor_profile as local_get_profile
-    profile = local_get_profile(vendor_name)
-    return profile.model_dump()
+    from app.erp.queries import fetch_vendor_by_name
 
+    vendor = fetch_vendor_by_name(vendor_name)
+    if vendor:
+        return vendor.to_dict()
+
+    # Graceful fallback for unknown / newly onboarded vendors
+    return {
+        "vendor_id": None,
+        "vendor_name": vendor_name or "Unknown Vendor",
+        "vendor_status": "New",
+        "trust_score": 50,
+        "average_invoice_amount": 0.0,
+        "total_previous_invoices": 0,
+        "previous_rejections": 0,
+        "last_bank_account_change": "N/A",
+        "bank_account": "N/A",
+        "risk_level": "Low",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Purchase Order tools
+# ---------------------------------------------------------------------------
+
+@mcp_server.tool()
+def get_purchase_order(purchase_order_number: str, role: str = "Finance Analyst") -> dict:
+    """Retrieves a Purchase Order record from the ERP database.
+
+    Args:
+        purchase_order_number: The PO reference number (e.g. PO-2026-001).
+        role: The role name requesting the action (default: Finance Analyst).
+
+    Returns:
+        A dict containing PO fields, or {"found": False} if not found.
+    """
+    verify_permission(role, "get_purchase_order")
+    from app.erp.queries import fetch_purchase_order
+
+    po = fetch_purchase_order(purchase_order_number)
+    if po:
+        return po.to_dict()
+    return {"found": False, "purchase_order_number": purchase_order_number}
+
+
+# ---------------------------------------------------------------------------
+# Goods Receipt tools
+# ---------------------------------------------------------------------------
+
+@mcp_server.tool()
+def get_goods_receipt(purchase_order_number: str, role: str = "Finance Analyst") -> list:
+    """Retrieves all Goods Receipt records linked to a Purchase Order.
+
+    Args:
+        purchase_order_number: The PO reference number to look up.
+        role: The role name requesting the action (default: Finance Analyst).
+
+    Returns:
+        A list of goods receipt dicts (may be empty if no receipts exist).
+    """
+    verify_permission(role, "get_goods_receipt")
+    from app.erp.queries import fetch_goods_receipts_for_po
+
+    receipts = fetch_goods_receipts_for_po(purchase_order_number)
+    return [r.to_dict() for r in receipts]
+
+
+# ---------------------------------------------------------------------------
+# Invoice History tools
+# ---------------------------------------------------------------------------
+
+@mcp_server.tool()
+def get_invoice_history(vendor_name: str, role: str = "Finance Analyst") -> list:
+    """Retrieves the historical invoice records for a vendor from the ERP database.
+
+    Supports lookup by vendor name to accommodate callers that have only the
+    name from an uploaded invoice.  Internally the query uses the indexed
+    vendor_name column; for vendor_id-based lookup use the queries module directly.
+
+    Args:
+        vendor_name: The display name of the vendor.
+        role: The role name requesting the action (default: Finance Analyst).
+
+    Returns:
+        A list of invoice history dicts ordered newest-first (may be empty).
+    """
+    verify_permission(role, "get_invoice_history")
+    from app.erp.queries import fetch_invoice_history_by_vendor_name
+
+    history = fetch_invoice_history_by_vendor_name(vendor_name)
+    return [h.to_dict() for h in history]
+
+
+# ---------------------------------------------------------------------------
+# Duplicate detection
+# ---------------------------------------------------------------------------
 
 @mcp_server.tool()
 def find_duplicate_invoice(invoice_number: str, role: str = "Finance Analyst") -> bool:
-    """Checks whether the given invoice number has already been paid or processed in ERP history.
+    """Checks whether the invoice number already exists in ERP invoice history.
 
     Args:
-        invoice_number: The unique invoice reference code.
+        invoice_number: The unique invoice reference code to check.
         role: The role name requesting the action (default: Finance Analyst).
     """
     verify_permission(role, "find_duplicate")
     if not invoice_number:
         return False
+    from app.erp.queries import check_duplicate_invoice
+    return check_duplicate_invoice(invoice_number)
 
-    if os.path.exists(HISTORY_CSV_PATH):
-        try:
-            with open(HISTORY_CSV_PATH, mode="r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    hist_inv = row.get("Invoice Number", "").strip().lower()
-                    if hist_inv == invoice_number.strip().lower():
-                        return True
-        except Exception:
-            pass
 
-    return False
-
+# ---------------------------------------------------------------------------
+# Investigation result submission
+# ---------------------------------------------------------------------------
 
 @mcp_server.tool()
 def submit_investigation_result(
@@ -88,9 +181,13 @@ def submit_investigation_result(
         "risk_score": risk_score,
         "fraud_score": fraud_score,
         "submitted": True,
-        "message": f"Successfully updated ERP status for '{invoice_number}'. Decision: {recommendation}."
+        "message": f"Successfully updated ERP status for '{invoice_number}'. Decision: {recommendation}.",
     }
 
+
+# ---------------------------------------------------------------------------
+# Pending invoices listing
+# ---------------------------------------------------------------------------
 
 @mcp_server.tool()
 def list_pending_invoices(role: str = "Finance Analyst") -> list[dict]:
@@ -106,15 +203,15 @@ def list_pending_invoices(role: str = "Finance Analyst") -> list[dict]:
             "vendor_name": "NewTech Solutions",
             "amount": 2500.00,
             "status": "Pending",
-            "date": "2026-06-29"
+            "date": "2026-06-29",
         },
         {
             "invoice_number": "INV-RISK-102",
             "vendor_name": "RiskCo LLC",
             "amount": 8000.00,
             "status": "Pending",
-            "date": "2026-06-30"
-        }
+            "date": "2026-06-30",
+        },
     ]
 
 

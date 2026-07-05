@@ -56,6 +56,10 @@ AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Initialise the ERP SQLite database (creates tables + seeds data if empty)
+    from app.erp.database import init_db
+    init_db()
+
     from app.agent import app as adk_app
     from app.agent import root_agent
 

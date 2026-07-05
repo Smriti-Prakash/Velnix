@@ -20,12 +20,22 @@ class AuthorizationError(Exception):
 
 
 ROLES_PERMISSIONS = {
-    "Finance Analyst": {"view_profile", "find_duplicate", "analyze_invoice"},
+    "Finance Analyst": {
+        "view_profile",
+        "find_duplicate",
+        "analyze_invoice",
+        "get_purchase_order",
+        "get_goods_receipt",
+        "get_invoice_history",
+    },
     "Finance Manager": {
         "view_profile",
         "find_duplicate",
         "analyze_invoice",
         "submit_investigation_result",
+        "get_purchase_order",
+        "get_goods_receipt",
+        "get_invoice_history",
     },
     "Administrator": {
         "view_profile",
@@ -34,6 +44,9 @@ ROLES_PERMISSIONS = {
         "submit_investigation_result",
         "list_pending_invoices",
         "view_audit_logs",
+        "get_purchase_order",
+        "get_goods_receipt",
+        "get_invoice_history",
     },
 }
 
