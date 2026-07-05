@@ -338,24 +338,13 @@ async def upload_invoice(file: UploadFile = File(...)):
                 parts=[types.Part.from_text(text=f"Please analyze this invoice:\n{extracted_text}")]
             )
             
-            # Run the synchronous generator in a background thread and use a queue
-            q = asyncio.Queue()
-            
-            def worker():
-                try:
-                    events = runner.run(
-                        new_message=message,
-                        user_id="anonymous",
-                        session_id=session.id,
-                        run_config=RunConfig(streaming_mode=StreamingMode.SSE),
-                    )
-                    for event in events:
-                        loop.call_soon_threadsafe(q.put_nowait, ("event", event))
-                    loop.call_soon_threadsafe(q.put_nowait, ("done", None))
-                except Exception as ex:
-                    loop.call_soon_threadsafe(q.put_nowait, ("error", ex))
-            
-            threading.Thread(target=worker, daemon=True).start()
+            # Run the generator asynchronously on the FastAPI event loop
+            events_generator = runner.run_async(
+                new_message=message,
+                user_id="anonymous",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
             
             full_report = ""
             seen_steps = set()
@@ -367,18 +356,8 @@ async def upload_invoice(file: UploadFile = File(...)):
             fraud_assessment = {}
             final_report_text = ""
             
-            while True:
-                msg_type, val = await q.get()
-                if msg_type == "done":
-                    break
-                elif msg_type == "error":
-                    yield {
-                        "event": "error",
-                        "data": json.dumps({"message": f"ADK workflow failure: {str(val)}"})
-                    }
-                    return
-                
-                event = val
+            async for event in events_generator:
+
                 # Detect active sub-agents and capture tool responses
                 if event.content and event.content.parts:
                     for part in event.content.parts:
