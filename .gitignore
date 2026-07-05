@@ -205,3 +205,5 @@ tools/a2a-inspector/
 # Dummy Credentials
 dummy_credentials.json
 
+# Generated test files
+invoice_test.pdf

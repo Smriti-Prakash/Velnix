@@ -83,6 +83,7 @@ def normalize_invoice_data(d: dict) -> dict:
     invoice_date = d.get("invoice_date") or d.get("date")
     due_date = d.get("due_date")
     purchase_order_number = d.get("purchase_order_number") or d.get("purchase_order") or d.get("po_number") or d.get("po")
+    order_id = d.get("order_id")
     currency = d.get("currency")
     
     amount_val = d.get("invoice_amount") or d.get("amount")
@@ -105,6 +106,7 @@ def normalize_invoice_data(d: dict) -> dict:
         "invoice_date": str(invoice_date) if invoice_date is not None else None,
         "due_date": str(due_date) if due_date is not None else None,
         "purchase_order_number": str(purchase_order_number) if purchase_order_number is not None else None,
+        "order_id": str(order_id) if order_id is not None else None,
         "currency": str(currency) if currency is not None else None,
         "invoice_amount": invoice_amount,
         "payment_terms": str(payment_terms) if payment_terms is not None else None,
@@ -168,8 +170,8 @@ def parse_invoice_tool(invoice_text: str) -> dict:
     Returns:
         A dictionary containing parsed invoice fields (invoice_number, vendor_name, etc.).
     """
-    from app.tools.invoice_tools import parse_invoice
-    parsed = parse_invoice(invoice_text)
+    from app.tools.invoice_tools import parse_invoice_with_gemini
+    parsed = parse_invoice_with_gemini(invoice_text)
     return parsed.model_dump()
 
 
@@ -228,7 +230,7 @@ def compile_report_tool(
     fraud_assessment: dict,
     invoice_text_len: int
 ) -> str:
-    """Formats and compiles all assessments into the branded VELNIX INITIAL INVESTIGATION REPORT.
+    """Formats and compiles all assessments into the branded VELNIX INVESTIGATION REPORT.
 
     Args:
         invoice_data: The dictionary of parsed invoice fields.
@@ -240,161 +242,124 @@ def compile_report_tool(
     Returns:
         Formatted string containing the branded investigation report.
     """
-    # 1. Format parsed fields block
-    parsed_fields_block = (
-        "--------------------------------------------------\n"
-        "PARSED INVOICE FIELDS:\n"
-        "  - Invoice Number: {}\n"
-        "  - Vendor Name: {}\n"
-        "  - Invoice Date: {}\n"
-        "  - Due Date: {}\n"
-        "  - Purchase Order Number: {}\n"
-        "  - Currency: {}\n"
-        "  - Invoice Amount: {}\n"
-        "  - Payment Terms: {}\n"
-        "--------------------------------------------------"
-    ).format(
-        invoice_data.get("invoice_number"),
-        invoice_data.get("vendor_name"),
-        invoice_data.get("invoice_date"),
-        invoice_data.get("due_date"),
-        invoice_data.get("purchase_order_number"),
-        invoice_data.get("currency"),
-        invoice_data.get("invoice_amount"),
-        invoice_data.get("payment_terms"),
-    )
+    invoice_number = invoice_data.get("invoice_number") or "None"
+    vendor_name = invoice_data.get("vendor_name") or "Unknown"
+    invoice_date = invoice_data.get("invoice_date") or "None"
+    curr = invoice_data.get("currency") or "$"
+    amount_val = invoice_data.get("invoice_amount")
+    
+    if amount_val is not None:
+        try:
+            amount_str = f"{curr}{float(amount_val):,.2f}"
+        except Exception:
+            amount_str = f"{curr}{amount_val}"
+    else:
+        amount_str = "$0.00"
 
-    # 2. Format Vendor Intelligence block
-    alerts = []
-    status = vendor_profile.get("vendor_status")
-    trust_score = vendor_profile.get("trust_score", 0)
+    # Extract risk & fraud metrics
+    risk_score = risk_assessment.get("risk_score") or 0
+    fraud_score = fraud_assessment.get("fraud_score") or 0
+    recommendation = risk_assessment.get("recommendation") or "REVIEW"
+    
+    # 1. Generate Concise Business Findings
+    findings = []
+    vendor_status = vendor_profile.get("vendor_status") or "New"
+    trust_score = vendor_profile.get("trust_score", 50)
+    
+    # Vendor status finding
+    if vendor_status == "New":
+        findings.append(f"This invoice was submitted by a newly onboarded vendor ({vendor_name}).")
+    elif vendor_status == "Watchlist":
+        findings.append(f"The vendor {vendor_name} is currently on the active Watchlist (Trust Score: {trust_score}/100).")
+    else:
+        findings.append(f"The vendor {vendor_name} is recognized and trusted (Trust Score: {trust_score}/100).")
+        
+    # PO / Order ID finding
+    po = invoice_data.get("purchase_order_number")
+    order_id = invoice_data.get("order_id")
+    if not po:
+        findings.append("No Purchase Order reference was provided in the uploaded invoice. Purchase Order validation could not be performed.")
+    else:
+        findings.append(f"The invoice references Purchase Order {po}.")
+        
+    if order_id:
+        findings.append(f"The transaction lists Order ID reference: {order_id}.")
+        
+    # Deviation finding
     avg_amt = vendor_profile.get("average_invoice_amount", 0.0)
     total_inv = vendor_profile.get("total_previous_invoices", 0)
-    inv_amt = invoice_data.get("invoice_amount")
-    curr = invoice_data.get("currency") or ""
-    
-    if status == "New":
-        alerts.append("- NOTICE: Vendor is New/Unverified. No prior invoice history.")
-    elif status == "Watchlist":
-        alerts.append(f"- WARNING: Vendor is on the Watchlist! Trust score is {trust_score}/100.")
-
-    if inv_amt is not None and total_inv > 0:
-        if inv_amt > 1.5 * avg_amt:
-            ratio = inv_amt / avg_amt
-            alerts.append(
-                f"- WARNING: Current invoice amount ({curr}{inv_amt:,.2f}) "
-                f"is unusually high ({ratio:.1f}x the historical average of "
-                f"{curr}{avg_amt:,.2f})."
-            )
-
-    alerts_text = "\n    ".join(alerts) if alerts else "- No critical alerts found."
-
-    vendor_intel_block = (
-        "--------------------------------------------------\n"
-        "VENDOR INTELLIGENCE:\n"
-        "  - Vendor Name: {}\n"
-        "  - Status: {}\n"
-        "  - Trust Score: {}/100\n"
-        "  - Total Previous Invoices: {}\n"
-        "  - Avg Invoice Amount: {}\n"
-        "  - Previous Rejections: {}\n"
-        "  - Last Bank Account Change: {}\n"
-        "  - Alerts/Notes:\n"
-        "    {}\n"
-        "--------------------------------------------------"
-    ).format(
-        vendor_profile.get("vendor_name"),
-        status,
-        trust_score,
-        total_inv,
-        avg_amt,
-        vendor_profile.get("previous_rejections", 0),
-        vendor_profile.get("last_bank_account_change"),
-        alerts_text,
-    )
-
-    # 3. Format Evidence Summary block
-    pos_findings = risk_assessment.get("positive_findings") or []
-    risk_findings = risk_assessment.get("risk_findings") or []
-    evidence = risk_assessment.get("evidence") or []
-    
-    pos_findings_lines = "\n  ".join(f"- {f}" for f in pos_findings) if pos_findings else "  - None"
-    risk_findings_lines = "\n  ".join(f"- {f}" for f in risk_findings) if risk_findings else "  - None"
-    evidence_lines = "\n  ".join(f"- {f}" for f in evidence) if evidence else "  - None"
-
-    evidence_block = (
-        "--------------------------------------------------\n"
-        "EVIDENCE SUMMARY:\n"
-        "Positive Findings:\n"
-        "  {}\n"
-        "Risk Findings:\n"
-        "  {}\n"
-        "Evidence:\n"
-        "  {}\n"
-        "Risk Score: {}/100\n"
-        "Recommendation: {}\n"
-        "Final Reasoning:\n"
-        "  {}\n"
-        "--------------------------------------------------"
-    ).format(
-        pos_findings_lines,
-        risk_findings_lines,
-        evidence_lines,
-        risk_assessment.get("risk_score"),
-        risk_assessment.get("recommendation"),
-        risk_assessment.get("final_reasoning")
-    )
-
-    # 4. Format Fraud Intelligence block
+    if amount_val is not None and total_inv > 0 and avg_amt > 0:
+        if amount_val > 1.5 * avg_amt:
+            ratio = amount_val / avg_amt
+            findings.append(f"The invoice amount is significantly higher ({ratio:.1f}x) than the vendor's historical average of {curr}{avg_amt:,.2f}.")
+            
+    # Duplicate check finding
     fraud_flags = fraud_assessment.get("fraud_flags") or []
-    fraud_flags_lines = "\n  ".join(f"- {f}" for f in fraud_flags) if fraud_flags else "  - None"
+    is_duplicate = any("duplicate" in flag.lower() for flag in fraud_flags) or fraud_assessment.get("fraud_score", 0) >= 50
+    if is_duplicate:
+        findings.append("CRITICAL: A duplicate invoice number was detected in historical processed transactions.")
+        
+    # Bank details change finding
+    recent_bank_change = any("bank account changed recently" in flag.lower() or "bank" in flag.lower() for flag in fraud_flags)
+    if recent_bank_change:
+        findings.append("HIGH: The vendor's bank account details were modified recently (within the last 60 days).")
 
-    fraud_block = (
-        "--------------------------------------------------\n"
-        "FRAUD INTELLIGENCE:\n"
-        "  - Fraud Score: {}/100\n"
-        "  - Confidence Level: {}\n"
-        "  - Investigation Required: {}\n"
-        "  - Fraud Flags:\n"
-        "    {}\n"
-        "  - Explanation:\n"
-        "    {}\n"
-        "--------------------------------------------------"
-    ).format(
-        fraud_assessment.get("fraud_score"),
-        fraud_assessment.get("confidence_level"),
-        "YES" if fraud_assessment.get("investigation_required") else "NO",
-        fraud_flags_lines.replace("\n", "\n    "),
-        (fraud_assessment.get("explanation") or "").replace("\n", "\n    ")
-    )
+    # Select top 3-5 findings
+    findings = [f.strip() for f in findings if f]
+    findings = findings[:5]
+    while len(findings) < 3:
+        findings.append("No anomalies or billing deviations were detected for this transaction.")
 
-    # 5. Format final report
+    # 2. Recommended Action (suitable for finance managers)
+    if is_duplicate:
+        recommended_action = "Reject the invoice immediately to prevent double payment; contact the vendor to resolve."
+    elif vendor_status == "New":
+        if not po:
+            recommended_action = "This invoice was submitted by a newly onboarded vendor. No Purchase Order reference was provided in the uploaded invoice, therefore payment should remain on hold until Procurement verifies the transaction."
+        else:
+            recommended_action = "Verify new vendor bank details against the provided Purchase Order reference before authorizing."
+    elif vendor_status == "Watchlist":
+        recommended_action = "Perform enhanced due diligence and obtain senior AP management approval before proceeding."
+    elif recent_bank_change:
+        recommended_action = "Verify bank details directly with a known contact at the vendor via a secondary channel."
+    elif recommendation == "APPROVE":
+        recommended_action = "Proceed with standard payment approval queue."
+    else:
+        recommended_action = "Review the invoice against department budget and verify deliverables before disbursement."
+
+    # 3. Format the executive summary report
+    findings_bullets = "\n".join(f"• {f}" for f in findings)
+    
     report = (
-        "==================================================\n"
-        "         VELNIX INITIAL INVESTIGATION REPORT       \n"
-        "==================================================\n"
-        "{}\n"
-        "{}\n"
-        "{}\n"
-        "{}\n"
-        "STATUS: RECEIVED & QUEUED FOR INVESTIGATION\n"
-        "PHASE: 5 (Fraud Intelligence)\n"
-        "CHARACTER COUNT: {}\n"
-        "SUMMARY:\n"
-        "Invoice content has been successfully parsed, historical risk evidence calculated, and fraud flags evaluated.\n"
-        "A final trust recommendation of {} has been issued with a risk score of {}/100 and a fraud score of {}/100.\n"
-        "=================================================="
+        "VELNIX INVESTIGATION REPORT\n\n"
+        "Invoice Summary\n"
+        "• Invoice Number: {}\n"
+        "• Vendor: {}\n"
+        "• Amount: {}\n"
+        "• Date: {}\n\n"
+        "Overall Decision\n"
+        "{}\n\n"
+        "Risk Score\n"
+        "{}/100\n\n"
+        "Fraud Score\n"
+        "{}/100\n\n"
+        "Top Findings (3-5 bullets)\n"
+        "{}\n\n"
+        "Recommended Action\n"
+        "{}\n\n"
+        "Generated by VELNIX"
     ).format(
-        parsed_fields_block,
-        vendor_intel_block,
-        evidence_block,
-        fraud_block,
-        invoice_text_len,
-        risk_assessment.get("recommendation"),
-        risk_assessment.get("risk_score"),
-        fraud_assessment.get("fraud_score"),
+        invoice_number,
+        vendor_name,
+        amount_str,
+        invoice_date,
+        recommendation,
+        risk_score,
+        fraud_score,
+        findings_bullets,
+        recommended_action
     )
-
+    
     return report
 
 
@@ -443,8 +408,9 @@ risk_assessment_agent = Agent(
     ),
     instruction="""You are the Risk Assessment Agent.
 Your sole responsibility is to calculate the risk score and make an AP recommendation.
-You must read the input request and history to locate the extracted invoice data and the actual vendor profile details retrieved by the vendor_intelligence_agent.
-You must use the calculate_risk_tool, passing the extracted invoice fields and the actual retrieved vendor profile details. Do not use default or mock vendor profile values (such as New status or 0 invoices) when a historical vendor profile has been retrieved.
+You must read the input request and history to locate the exact output dictionary of the `parse_invoice_tool` call.
+You MUST pass this dictionary as the `invoice_data` parameter to the `calculate_risk_tool` verbatim, without modifying, omitting, or defaulting any of its keys or values. Every key (such as `invoice_number`, `vendor_name`, `invoice_amount`, `invoice_date`, `due_date`, `purchase_order_number`, `currency`, `payment_terms`, `order_id`) MUST be preserved exactly as returned by the tool.
+Also locate the actual vendor profile details retrieved by the vendor_intelligence_agent in the history, and pass it to `calculate_risk_tool`.
 Return the resulting risk assessment dictionary.
 Do not parse invoices or run fraud checks.""",
     tools=[calculate_risk_tool],
@@ -461,8 +427,9 @@ fraud_intelligence_agent = Agent(
     instruction="""You are the Fraud Intelligence Agent.
 Your sole responsibility is to run the fraud detection engine.
 You must first invoke the `find_duplicate_invoice` tool on the connected MCP server to verify if the invoice number is a duplicate.
-Then locate the actual vendor profile details retrieved by the vendor_intelligence_agent in the conversation history (do not use default or mock vendor profile values).
-Call `calculate_fraud_tool` passing the duplicate check result, along with the invoice data, the actual retrieved vendor profile details, and the raw text.
+You must read the input request and history to locate the exact output dictionary of the `parse_invoice_tool` call.
+You MUST pass this dictionary as the `invoice_data` parameter to the `calculate_fraud_tool` verbatim, without modifying, omitting, or defaulting any of its keys or values. Every key (such as `invoice_number`, `vendor_name`, `invoice_amount`, `invoice_date`, `due_date`, `purchase_order_number`, `currency`, `payment_terms`, `order_id`) MUST be preserved exactly as returned by the tool.
+Also locate the actual vendor profile details retrieved by the vendor_intelligence_agent in the history, and pass it to `calculate_fraud_tool` along with the raw text and the duplicate check result.
 Return the resulting fraud assessment dictionary.
 If needed, you can submit results using the MCP tool `submit_investigation_result` or view pending items using `list_pending_invoices`.""",
     tools=[erp_mcp_toolset, calculate_fraud_tool],
@@ -477,9 +444,10 @@ final_decision_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="""You are the Final Decision Agent.
-Your sole responsibility is to synthesize all findings into the final branded VELNIX INITIAL INVESTIGATION REPORT.
-You must read the history to locate the extracted invoice data, the retrieved vendor profile, the risk assessment, and the fraud assessment.
-You must use the compile_report_tool to format these four inputs (parsed invoice, vendor intelligence, risk assessment, fraud assessment) and raw text length into the branded report.
+Your sole responsibility is to synthesize all findings into the final branded VELNIX INVESTIGATION REPORT.
+You must read the history to locate the exact output dictionary of the `parse_invoice_tool` call.
+You MUST pass this dictionary as the `invoice_data` parameter to the `compile_report_tool` verbatim, without modifying, omitting, or defaulting any of its keys or values. Every key (such as `invoice_number`, `vendor_name`, `invoice_amount`, `invoice_date`, `due_date`, `purchase_order_number`, `currency`, `payment_terms`, `order_id`) MUST be preserved exactly as returned by the tool.
+Also locate the retrieved vendor profile, the risk assessment, and the fraud assessment, and pass them to `compile_report_tool`.
 Return the complete formatted text of the report.
 Do not perform any scoring or parsing calculations yourself.""",
     tools=[compile_report_tool],
@@ -505,7 +473,7 @@ When a user submits an invoice or asks to analyze an invoice, you MUST coordinat
 3. Call `risk_assessment_agent` passing BOTH the extracted invoice data and the actual retrieved vendor profile details (vendor_name, status, trust score, average amount, rejections, total invoices, and last bank account change) to evaluate the risk score.
 4. Call `fraud_intelligence_agent` passing BOTH the extracted invoice data and the actual retrieved vendor profile details, along with the raw invoice text, to check for fraud indicators (leveraging the MCP server for duplicate verification).
 5. Call `final_decision_agent` to compile all four structures (invoice data, vendor profile, risk assessment, and fraud assessment) plus the length of the raw invoice text into the final branded report.
-6. Return the resulting branded VELNIX INITIAL INVESTIGATION REPORT verbatim to the user.
+6. Return the resulting branded VELNIX INVESTIGATION REPORT verbatim to the user.
 
 If a user asks a general question (like 'Why is the sky blue?'), answer it directly. Only invoke the invoice workflow when requested to investigate or analyze an invoice.""",
     sub_agents=[

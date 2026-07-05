@@ -6,7 +6,7 @@ import { MOCK_INVOICES, type Invoice } from '../services/mockData';
 export const AllInvoices: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [sortField, setSortField] = useState<keyof Invoice>('date');
+  const [sortField, setSortField] = useState<keyof Invoice>('invoice_date');
   const [sortAsc, setSortAsc] = useState(false);
 
   const handleSort = (field: keyof Invoice) => {
@@ -21,8 +21,8 @@ export const AllInvoices: React.FC = () => {
   const filteredInvoices = MOCK_INVOICES.filter((invoice) => {
     const matchesSearch = 
       invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (invoice.purchaseOrderNumber && invoice.purchaseOrderNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      invoice.vendor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (invoice.purchase_order_number && invoice.purchase_order_number.toLowerCase().includes(searchTerm.toLowerCase()));
       
     const matchesFilter = statusFilter === 'All' || invoice.status === statusFilter;
     
@@ -117,31 +117,31 @@ export const AllInvoices: React.FC = () => {
                     <ArrowUpDown className="h-3.5 w-3.5" />
                   </div>
                 </th>
-                <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('vendorName')}>
+                <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('vendor_name')}>
                   <div className="flex items-center space-x-1">
                     <span>Vendor</span>
                     <ArrowUpDown className="h-3.5 w-3.5" />
                   </div>
                 </th>
-                <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('date')}>
+                <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('invoice_date')}>
                   <div className="flex items-center space-x-1">
                     <span>Invoice Date</span>
                     <ArrowUpDown className="h-3.5 w-3.5" />
                   </div>
                 </th>
-                <th className="px-6 py-4 text-right cursor-pointer" onClick={() => handleSort('amount')}>
+                <th className="px-6 py-4 text-right cursor-pointer" onClick={() => handleSort('invoice_amount')}>
                   <div className="flex items-center justify-end space-x-1">
                     <span>Amount</span>
                     <ArrowUpDown className="h-3.5 w-3.5" />
                   </div>
                 </th>
-                <th className="px-6 py-4 text-center cursor-pointer" onClick={() => handleSort('riskScore')}>
+                <th className="px-6 py-4 text-center cursor-pointer" onClick={() => handleSort('risk_score')}>
                   <div className="flex items-center justify-center space-x-1">
                     <span>Risk Score</span>
                     <ArrowUpDown className="h-3.5 w-3.5" />
                   </div>
                 </th>
-                <th className="px-6 py-4 text-center cursor-pointer" onClick={() => handleSort('fraudScore')}>
+                <th className="px-6 py-4 text-center cursor-pointer" onClick={() => handleSort('fraud_score')}>
                   <div className="flex items-center justify-center space-x-1">
                     <span>Fraud Score</span>
                     <ArrowUpDown className="h-3.5 w-3.5" />
@@ -166,19 +166,19 @@ export const AllInvoices: React.FC = () => {
                         {invoice.id}
                       </Link>
                     </td>
-                    <td className="px-6 py-4 font-semibold text-slate-800">{invoice.vendorName}</td>
-                    <td className="px-6 py-4 text-slate-500">{invoice.invoiceDate}</td>
+                    <td className="px-6 py-4 font-semibold text-slate-800">{invoice.vendor_name}</td>
+                    <td className="px-6 py-4 text-slate-500">{invoice.invoice_date}</td>
                     <td className="px-6 py-4 text-right font-bold text-slate-800">
-                      {invoice.currency}{invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {invoice.currency}{(invoice.invoice_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.riskScore)}`}>
-                        {invoice.riskScore}/100
+                      <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.risk_score)}`}>
+                        {invoice.risk_score}/100
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.fraudScore)}`}>
-                        {invoice.fraudScore}/100
+                      <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.fraud_score)}`}>
+                        {invoice.fraud_score}/100
                       </span>
                     </td>
                     <td className="px-6 py-4">

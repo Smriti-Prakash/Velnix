@@ -92,9 +92,9 @@ def test_agent_invoice_workflow() -> None:
                 if part.text:
                     full_response += part.text
 
-    assert "VELNIX INITIAL INVESTIGATION REPORT" in full_response
-    assert "PARSED INVOICE FIELDS:" in full_response
-    assert "VENDOR INTELLIGENCE:" in full_response
-    assert "EVIDENCE SUMMARY:" in full_response
-    assert "FRAUD INTELLIGENCE:" in full_response
+    assert "VELNIX INVESTIGATION REPORT" in full_response
+    assert "Invoice Summary" in full_response
+    assert "Invoice Number:" in full_response
+    assert "Overall Decision" in full_response
+    assert "Top Findings" in full_response
 

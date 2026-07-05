@@ -18,7 +18,7 @@ export const VendorDetails: React.FC = () => {
   }
 
   // Filter invoices for this vendor
-  const vendorInvoices = MOCK_INVOICES.filter(i => i.vendorName === vendor.name);
+  const vendorInvoices = MOCK_INVOICES.filter(i => i.vendor_name === vendor.name);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -126,18 +126,18 @@ export const VendorDetails: React.FC = () => {
                         {invoice.id}
                       </Link>
                     </td>
-                    <td className="px-6 py-4 text-slate-500">{invoice.invoiceDate}</td>
+                    <td className="px-6 py-4 text-slate-500">{invoice.invoice_date}</td>
                     <td className="px-6 py-4 text-right font-bold text-slate-800">
-                      {invoice.currency}{invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {invoice.currency}{(invoice.invoice_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded text-xs font-bold border bg-${getRiskColor(invoice.riskScore)}-50 text-${getRiskColor(invoice.riskScore)}-700 border-${getRiskColor(invoice.riskScore)}-200`}>
-                        {invoice.riskScore}/100
+                      <span className={`px-2 py-1 rounded text-xs font-bold border bg-${getRiskColor(invoice.risk_score)}-50 text-${getRiskColor(invoice.risk_score)}-700 border-${getRiskColor(invoice.risk_score)}-200`}>
+                        {invoice.risk_score}/100
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded text-xs font-bold border bg-${getRiskColor(invoice.fraudScore)}-50 text-${getRiskColor(invoice.fraudScore)}-700 border-${getRiskColor(invoice.fraudScore)}-200`}>
-                        {invoice.fraudScore}/100
+                      <span className={`px-2 py-1 rounded text-xs font-bold border bg-${getRiskColor(invoice.fraud_score)}-50 text-${getRiskColor(invoice.fraud_score)}-700 border-${getRiskColor(invoice.fraud_score)}-200`}>
+                        {invoice.fraud_score}/100
                       </span>
                     </td>
                     <td className="px-6 py-4">

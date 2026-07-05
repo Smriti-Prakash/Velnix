@@ -1,18 +1,23 @@
 export interface Invoice {
   id: string;
-  vendorName: string;
-  amount: number;
-  date: string;
-  dueDate: string;
-  purchaseOrderNumber?: string;
-  paymentTerms?: string;
+  invoice_number: string;
+  vendor_name: string;
+  invoice_amount: number;
+  invoice_date: string;
+  due_date?: string;
+  purchase_order_number?: string;
+  order_id?: string;
+  payment_terms?: string;
   currency: string;
-  riskScore: number;
-  fraudScore: number;
-  recommendation: 'APPROVE' | 'REVIEW' | 'INVESTIGATE';
+  risk_score: number;
+  fraud_score: number;
+  recommendation: 'APPROVE' | 'REVIEW' | 'INVESTIGATE' | 'REJECT';
   status: 'Pending' | 'Approved' | 'Rejected' | 'Review' | 'Investigate';
   priority: 'High' | 'Medium' | 'Low';
-  invoiceDate: string;
+  risk_findings?: string[];
+  fraud_findings?: string[];
+  final_reasoning?: string;
+  vendor_alerts?: string[];
 }
 
 export interface Vendor {
@@ -43,7 +48,39 @@ const LOCAL_VENDORS_KEY = "velnix_custom_vendors";
 const getStoredInvoices = (): Invoice[] => {
   try {
     const stored = localStorage.getItem(LOCAL_INVOICES_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as any[];
+    return parsed.map(inv => {
+      const invoice_number = inv.invoice_number || inv.invoiceNumber || inv.id || "INV-NEW";
+      const vendor_name = inv.vendor_name || inv.vendorName || "Unknown";
+      const invoice_amount = inv.invoice_amount !== undefined ? inv.invoice_amount : (inv.amount !== undefined ? inv.amount : 0);
+      const invoice_date = inv.invoice_date || inv.invoiceDate || inv.date || new Date().toISOString().split("T")[0];
+      const due_date = inv.due_date || inv.dueDate || invoice_date;
+      const purchase_order_number = inv.purchase_order_number || inv.purchaseOrderNumber;
+      const payment_terms = inv.payment_terms || inv.paymentTerms;
+      const risk_score = inv.risk_score !== undefined ? inv.risk_score : (inv.riskScore !== undefined ? inv.riskScore : 0);
+      const fraud_score = inv.fraud_score !== undefined ? inv.fraud_score : (inv.fraudScore !== undefined ? inv.fraudScore : 0);
+      const recommendation = inv.recommendation || "REVIEW";
+      const status = inv.status || "Pending";
+      const priority = inv.priority || "Low";
+
+      return {
+        ...inv,
+        id: invoice_number,
+        invoice_number,
+        vendor_name,
+        invoice_amount,
+        invoice_date,
+        due_date,
+        purchase_order_number,
+        payment_terms,
+        risk_score,
+        fraud_score,
+        recommendation,
+        status,
+        priority
+      };
+    });
   } catch {
     return [];
   }
@@ -80,83 +117,98 @@ export const MOCK_INVOICES: Invoice[] = [
   ...getStoredInvoices(),
   {
     id: "INV-1002",
-    vendorName: "Acme Corp",
-    amount: 10000.00,
-    date: "2026-06-30",
-    dueDate: "2026-07-30",
-    purchaseOrderNumber: "PO-9912",
-    paymentTerms: "Net 30",
+    invoice_number: "INV-1002",
+    vendor_name: "Acme Corp",
+    invoice_amount: 10000.00,
+    invoice_date: "2026-06-30",
+    due_date: "2026-07-30",
+    purchase_order_number: "PO-9912",
+    payment_terms: "Net 30",
     currency: "$",
-    riskScore: 5,
-    fraudScore: 10,
+    risk_score: 5,
+    fraud_score: 10,
     recommendation: "APPROVE",
     status: "Pending",
     priority: "Low",
-    invoiceDate: "2026-06-30"
+    risk_findings: ["Vendor trust score is high (95/100).", "Transaction is within typical billing range."],
+    fraud_findings: ["No duplicate invoices detected.", "No recent bank account changes."],
+    final_reasoning: "Based on automated analysis, this invoice matches all transaction metadata, aligns with historical vendor averages, and contains zero duplicate or fraud indicators. Approved for immediate disbursement."
   },
   {
     id: "INV-2041",
-    vendorName: "Delta Systems Ltd",
-    amount: 85400.00,
-    date: "2026-07-01",
-    dueDate: "2026-07-15",
-    purchaseOrderNumber: undefined,
-    paymentTerms: "Net 15",
+    invoice_number: "INV-2041",
+    vendor_name: "Delta Systems Ltd",
+    invoice_amount: 85400.00,
+    invoice_date: "2026-07-01",
+    due_date: "2026-07-15",
+    purchase_order_number: undefined,
+    payment_terms: "Net 15",
     currency: "$",
-    riskScore: 78,
-    fraudScore: 65,
+    risk_score: 78,
+    fraud_score: 65,
     recommendation: "INVESTIGATE",
     status: "Investigate",
     priority: "High",
-    invoiceDate: "2026-07-01"
+    risk_findings: ["Invoice amount ($85,400.00) is 2.5x the historical average.", "Missing Purchase Order reference."],
+    fraud_findings: ["Calculated fraud indicators exceed standard threshold.", "Vendor account flagged for review."],
+    final_reasoning: "Caution recommended: The invoice deviates significantly from historical limits and is missing a PO reference. We recommend manual manager review before final AP approval."
   },
   {
     id: "INV-0883",
-    vendorName: "Vertex Consulting",
-    amount: 4500.00,
-    date: "2026-06-28",
-    dueDate: "2026-07-28",
-    purchaseOrderNumber: "PO-4402",
-    paymentTerms: "Net 30",
+    invoice_number: "INV-0883",
+    vendor_name: "Vertex Consulting",
+    invoice_amount: 4500.00,
+    invoice_date: "2026-06-28",
+    due_date: "2026-07-28",
+    purchase_order_number: "PO-4402",
+    payment_terms: "Net 30",
     currency: "$",
-    riskScore: 12,
-    fraudScore: 8,
+    risk_score: 12,
+    fraud_score: 8,
     recommendation: "APPROVE",
     status: "Approved",
     priority: "Low",
-    invoiceDate: "2026-06-28"
+    risk_findings: ["Vendor trust score is verified.", "Matches PO reference."],
+    fraud_findings: ["No anomalies detected."],
+    final_reasoning: "Approved for disbursement. All verification checks passed."
   },
   {
     id: "INV-9941",
-    vendorName: "Apex Logistics",
-    amount: 12500.00,
-    date: "2026-07-02",
-    dueDate: "2026-07-10",
-    purchaseOrderNumber: "PO-8120",
-    paymentTerms: "Due on Receipt",
+    invoice_number: "INV-9941",
+    vendor_name: "Apex Logistics",
+    invoice_amount: 12500.00,
+    invoice_date: "2026-07-02",
+    due_date: "2026-07-10",
+    purchase_order_number: "PO-8120",
+    payment_terms: "Due on Receipt",
     currency: "$",
-    riskScore: 48,
-    fraudScore: 42,
+    risk_score: 48,
+    fraud_score: 42,
     recommendation: "REVIEW",
     status: "Review",
     priority: "Medium",
-    invoiceDate: "2026-07-02"
+    risk_findings: ["Invoice is marked 'Due on Receipt'.", "Slight deviation from average amount."],
+    fraud_findings: ["Urgent payment terms check recommended."],
+    final_reasoning: "Under manual review due to urgent payment terms. Verify deliverables before releasing payment."
   },
   {
     id: "INV-7732",
-    vendorName: "Sentinel Security",
-    amount: 32000.00,
-    date: "2026-06-25",
-    dueDate: "2026-07-25",
-    purchaseOrderNumber: undefined,
-    paymentTerms: "Net 30",
+    invoice_number: "INV-7732",
+    vendor_name: "Sentinel Security",
+    invoice_amount: 32000.00,
+    invoice_date: "2026-06-25",
+    due_date: "2026-07-25",
+    purchase_order_number: undefined,
+    payment_terms: "Net 30",
     currency: "$",
-    riskScore: 92,
-    fraudScore: 88,
+    risk_score: 92,
+    fraud_score: 88,
     recommendation: "INVESTIGATE",
     status: "Rejected",
     priority: "High",
-    invoiceDate: "2026-06-25"
+    risk_findings: ["Extreme deviation from historical average.", "No PO or contract reference."],
+    fraud_findings: ["High indicator of potential overbilling.", "Security trust score is critical."],
+    final_reasoning: "Transaction rejected. High risk indicators of potential overbilling and layout discrepancies."
   }
 ];
 

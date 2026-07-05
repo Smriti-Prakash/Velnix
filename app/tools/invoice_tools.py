@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -26,6 +26,44 @@ class InvoiceData(BaseModel):
     currency: Optional[str] = None
     invoice_amount: Optional[float] = None
     payment_terms: Optional[str] = None
+    order_id: Optional[str] = None
+
+
+def parse_invoice_with_gemini(invoice_text: str) -> InvoiceData:
+    """Primary document extraction method using Gemini's structured output.
+    
+    Falls back to regex-based extraction if API calls fail or credentials are missing.
+    """
+    import os
+    try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if api_key:
+            from google import genai
+            from google.genai import types
+            
+            client = genai.Client(api_key=api_key)
+            prompt = (
+                "Analyze the following raw invoice text and extract the structured fields. "
+                "Ensure that order_id is extracted if present (e.g. Order ID: ES-2013-VD21670139-41293) "
+                "and purchase_order_number is extracted separately. Do not map Order ID into purchase_order_number.\n\n"
+                f"Raw invoice text:\n{invoice_text}"
+            )
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=InvoiceData,
+                ),
+            )
+            import json
+            parsed_json = json.loads(response.text)
+            return InvoiceData(**parsed_json)
+    except Exception:
+        # Silently log/ignore and fall back to regex
+        pass
+
+    return parse_invoice(invoice_text)
 
 
 def parse_invoice(invoice_text: str) -> InvoiceData:
@@ -41,7 +79,7 @@ def parse_invoice(invoice_text: str) -> InvoiceData:
 
     # 1. Invoice Number
     inv_num_match = re.search(
-        r'(?:invoice\s+(?:id|number|no|#)|inv\s*(?:#|no|number)?)\s*[:#-]?\s*([a-zA-Z0-9-]+)',
+        r'(?:invoice\s*(?:id|number|no|#)?|inv\s*(?:#|no|number)?)\s*[:#-]?\s*([a-zA-Z0-9-]+)',
         invoice_text,
         re.IGNORECASE,
     )
@@ -75,7 +113,7 @@ def parse_invoice(invoice_text: str) -> InvoiceData:
     )
     data["due_date"] = due_date_match.group(1).strip() if due_date_match else None
 
-    # 5. Purchase Order Number
+    # 5. Purchase Order Number (do not map Order ID here)
     po_match = re.search(
         r'(?:purchase\s+order(?:\s+number)?|po\s*(?:#|number|no)?)\s*[:#-]?\s*([a-zA-Z0-9-]+)',
         invoice_text,
@@ -83,9 +121,17 @@ def parse_invoice(invoice_text: str) -> InvoiceData:
     )
     data["purchase_order_number"] = po_match.group(1).strip() if po_match else None
 
+    # 5.5 Order ID (separated from PO Reference)
+    order_id_match = re.search(
+        r'(?:order\s*(?:id|#|number))\s*[:#-]?\s*([a-zA-Z0-9-]+)',
+        invoice_text,
+        re.IGNORECASE,
+    )
+    data["order_id"] = order_id_match.group(1).strip() if order_id_match else None
+
     # 6. Currency & Invoice Amount
     amount_match = re.search(
-        r'(?:amount(?:\s+due)?|total(?:\s+due)?|grand\s+total)\s*:\s*([^\n]+)',
+        r'(?:total\s+amount|amount(?:\s+due)?|total(?:\s+due)?|grand\s+total)\s*:\s*([^\n]+)',
         invoice_text,
         re.IGNORECASE,
     )

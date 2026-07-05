@@ -92,13 +92,13 @@ export const ApprovalQueue: React.FC = () => {
   const filteredInvoices = MOCK_INVOICES.filter((invoice) => {
     const matchesSearch = 
       invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (invoice.purchaseOrderNumber && invoice.purchaseOrderNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      invoice.vendor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (invoice.purchase_order_number && invoice.purchase_order_number.toLowerCase().includes(searchTerm.toLowerCase()));
       
     const matchesPrio = priorityFilter === 'All' || invoice.priority === priorityFilter;
     const matchesStat = matchesStatus(invoice.status, invoice.recommendation, statusFilter);
-    const matchesRsk = matchesRisk(invoice.riskScore, riskFilter);
-    const matchesTime = isWithinPeriod(invoice.invoiceDate, timePeriod, fromDate, toDate);
+    const matchesRsk = matchesRisk(invoice.risk_score, riskFilter);
+    const matchesTime = isWithinPeriod(invoice.invoice_date, timePeriod, fromDate, toDate);
 
     return matchesSearch && matchesPrio && matchesStat && matchesRsk && matchesTime;
   });
@@ -302,19 +302,19 @@ export const ApprovalQueue: React.FC = () => {
                       {invoice.id}
                     </Link>
                   </td>
-                  <td className="px-6 py-4 font-semibold text-slate-800">{invoice.vendorName}</td>
-                  <td className="px-6 py-4 text-slate-500">{invoice.invoiceDate}</td>
+                  <td className="px-6 py-4 font-semibold text-slate-800">{invoice.vendor_name}</td>
+                  <td className="px-6 py-4 text-slate-500">{invoice.invoice_date}</td>
                   <td className="px-6 py-4 text-right font-bold text-slate-800">
-                    {invoice.currency}{invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {invoice.currency}{(invoice.invoice_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.riskScore)}`}>
-                      {invoice.riskScore}/100
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.risk_score)}`}>
+                      {invoice.risk_score}/100
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.fraudScore)}`}>
-                      {invoice.fraudScore}/100
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskBadgeStyles(invoice.fraud_score)}`}>
+                      {invoice.fraud_score}/100
                     </span>
                   </td>
                   <td className="px-6 py-4">

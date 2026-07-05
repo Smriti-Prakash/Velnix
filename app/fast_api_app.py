@@ -278,6 +278,7 @@ async def upload_invoice(file: UploadFile = File(...)):
             vendor_profile = {}
             risk_assessment = {}
             fraud_assessment = {}
+            final_report_text = ""
             
             while True:
                 msg_type, val = await q.get()
@@ -331,6 +332,9 @@ async def upload_invoice(file: UploadFile = File(...)):
                                     fraud_assessment = resp_dict
                                 elif resp.name == "get_vendor_profile":
                                     vendor_profile = resp_dict
+                                elif resp.name == "compile_report_tool":
+                                    if isinstance(resp_dict, dict) and "result" in resp_dict:
+                                        final_report_text = resp_dict["result"]
 
                         if part.text:
                             # Only capture the text from the final compile/decision phase to avoid intermediate text dumps
@@ -370,12 +374,43 @@ async def upload_invoice(file: UploadFile = File(...)):
                                     "data": json.dumps({"step": "final_decision", "message": "Final decision complete"})
                                 }
                         
-                        if part.text:
-                            full_report += part.text
-            
             # Step 8: Final Report Ready
-            if not full_report or "VELNIX INITIAL INVESTIGATION REPORT" not in full_report:
+            if final_report_text:
+                full_report = final_report_text.strip()
+
+            if not full_report or "VELNIX INVESTIGATION REPORT" not in full_report:
                 raise ValueError("AI workflow succeeded but did not return a valid VELNIX Investigation Report.")
+                
+            rec = risk_assessment.get("recommendation") or "REVIEW"
+            status_map = {
+                "APPROVE": "Approved",
+                "REVIEW": "Review",
+                "INVESTIGATE": "Investigate",
+                "REJECT": "Rejected"
+            }
+            status_val = status_map.get(rec, "Review")
+            
+            risk_sc = risk_assessment.get("risk_score") or 0
+            fraud_sc = fraud_assessment.get("fraud_score") or 0
+            
+            priority_val = "Low"
+            if risk_sc > 70 or fraud_sc > 70:
+                priority_val = "High"
+            elif risk_sc > 40 or fraud_sc > 40:
+                priority_val = "Medium"
+
+            enriched_invoice = {
+                **invoice_data,
+                "risk_score": risk_sc,
+                "fraud_score": fraud_sc,
+                "recommendation": rec,
+                "status": status_val,
+                "priority": priority_val,
+                "risk_findings": risk_assessment.get("risk_findings") or [],
+                "fraud_findings": fraud_assessment.get("fraud_findings") or [],
+                "final_reasoning": risk_assessment.get("final_reasoning") or "",
+                "vendor_alerts": vendor_profile.get("alerts") or []
+            }
                 
             yield {
                 "event": "progress",
@@ -383,7 +418,7 @@ async def upload_invoice(file: UploadFile = File(...)):
                     "step": "report_ready",
                     "message": "Report ready",
                     "report": full_report,
-                    "invoice_data": invoice_data,
+                    "invoice_data": enriched_invoice,
                     "vendor_profile": vendor_profile,
                     "risk_assessment": risk_assessment,
                     "fraud_assessment": fraud_assessment

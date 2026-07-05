@@ -3,47 +3,6 @@ import { UploadCloud, File, CheckCircle2, AlertTriangle, Copy, Download } from '
 import { addCustomInvoice, addCustomVendor } from '../services/mockData';
 import type { Invoice, Vendor } from '../services/mockData';
 
-const mapToInvoice = (
-  invoiceData: any,
-  riskAssessment: any,
-  fraudAssessment: any
-): Invoice => {
-  const id = invoiceData.invoice_number || "INV-NEW";
-  const vendorName = invoiceData.vendor_name || "Unknown";
-  const amount = invoiceData.invoice_amount || 0;
-  const date = invoiceData.invoice_date || new Date().toISOString().split("T")[0];
-  const dueDate = invoiceData.due_date || date;
-  const riskScore = riskAssessment?.risk_score ?? 0;
-  const fraudScore = fraudAssessment?.fraud_score ?? 0;
-  const recommendation = (riskAssessment?.recommendation ?? "REVIEW") as 'APPROVE' | 'REVIEW' | 'INVESTIGATE';
-
-  let status: Invoice['status'] = 'Pending';
-  if (recommendation === 'APPROVE') status = 'Pending';
-  else if (recommendation === 'REVIEW') status = 'Review';
-  else if (recommendation === 'INVESTIGATE') status = 'Investigate';
-
-  let priority: Invoice['priority'] = 'Low';
-  if (riskScore > 75 || fraudScore > 75) priority = 'High';
-  else if (riskScore > 40 || fraudScore > 40) priority = 'Medium';
-
-  return {
-    id,
-    vendorName,
-    amount,
-    date,
-    dueDate,
-    purchaseOrderNumber: invoiceData.purchase_order_number || undefined,
-    paymentTerms: invoiceData.payment_terms || undefined,
-    currency: invoiceData.currency || "$",
-    riskScore,
-    fraudScore,
-    recommendation,
-    status,
-    priority,
-    invoiceDate: date
-  };
-};
-
 const mapToVendor = (vendorProfile: any, riskAssessment: any): Vendor => {
   const riskScore = riskAssessment?.risk_score ?? 0;
   let riskLevel: Vendor['riskLevel'] = 'Low';
@@ -70,16 +29,18 @@ export const Upload: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<string>('');
+
   const [copied, setCopied] = useState(false);
   const [finalInvoiceId, setFinalInvoiceId] = useState<string>("INV-1002");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const steps = [
-    "Uploading document to server...",
-    "Extracting metadata fields...",
-    "Verifying historical vendor profile...",
-    "Evaluating risk score penalties...",
-    "Scanning for duplicate fraud indicators...",
+    "Uploading document...",
+    "Performing OCR/text extraction...",
+    "Parsing invoice fields...",
+    "Retrieving vendor profile...",
+    "Evaluating risk score...",
+    "Running fraud checks...",
     "Compiling final report..."
   ];
 
@@ -97,30 +58,15 @@ export const Upload: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-      if (validTypes.includes(file.type)) {
-        setSelectedFile(file);
-        setError(null);
-      } else {
-        setError("Unsupported file type. Please upload a PDF, PNG, or JPEG.");
-      }
+      setSelectedFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-      if (validTypes.includes(file.type)) {
-        setSelectedFile(file);
-        setError(null);
-      } else {
-        setError("Unsupported file type. Please upload a PDF, PNG, or JPEG.");
-      }
+      setSelectedFile(e.target.files[0]);
     }
   };
 
@@ -130,78 +76,74 @@ export const Upload: React.FC = () => {
 
   const startAnalysis = async () => {
     if (!selectedFile) return;
-    
     setStatus('processing');
     setCurrentStep(0);
     setError(null);
     setReport('');
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    setCopied(false);
 
     try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        let errMsg = "Upload failed.";
-        try {
-          const errObj = JSON.parse(errorText);
-          errMsg = errObj.detail || errObj.message || errMsg;
-        } catch {
-          errMsg = errorText || errMsg;
-        }
-        throw new Error(errMsg);
+        throw new Error(`Upload failed with status: ${response.status}`);
       }
 
       const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("Failed to initialize progress stream.");
-      }
-
       const decoder = new TextDecoder();
       let buffer = "";
+      let finalReport = "";
+
+      if (!reader) {
+        throw new Error("Failed to read stream response.");
+      }
 
       while (true) {
-        const { done, value } = await reader.read();
+        const { value, done } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
         
-        // Normalize CRLF to LF to handle Windows line endings
+        // Normalize CRLF to LF for Windows/Uvicorn compatibility
         const normalized = buffer.replace(/\r\n/g, '\n');
-        const parts = normalized.split('\n\n');
-        buffer = parts.pop() || '';
+        const chunks = normalized.split('\n\n');
+        
+        // Keep the last unfinished chunk in the buffer
+        buffer = chunks[chunks.length - 1];
 
-        for (const part of parts) {
-          const lines = part.split('\n');
-          let data = "";
-          let event = "";
-
+        for (let i = 0; i < chunks.length - 1; i++) {
+          const chunk = chunks[i].trim();
+          if (!chunk) continue;
+          const lines = chunk.split('\n');
+          let dataStr = "";
+          let eventName = "";
           for (const line of lines) {
-            if (line.startsWith('event:')) {
-              event = line.replace('event:', '').trim();
-            } else if (line.startsWith('data:')) {
-              data = line.replace('data:', '').trim();
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataStr = line.slice(5).trim();
             }
           }
 
-          if (event === "error") {
+          if (eventName === "error" && dataStr) {
             try {
-              const parsed = JSON.parse(data);
-              throw new Error(parsed.message || "Orchestrator pipeline execution failed.");
+              const parsed = JSON.parse(dataStr);
+              throw new Error(parsed.message || "Orchestration pipeline execution failed.");
             } catch (e: any) {
-              throw new Error(e.message || "Orchestrator pipeline execution failed.");
+              throw new Error(e.message || "Orchestration pipeline execution failed.");
             }
           }
 
-          if (data) {
+          if (dataStr) {
             try {
-              const parsed = JSON.parse(data);
-              const { step, report: finalReport, invoice_data, vendor_profile, risk_assessment, fraud_assessment } = parsed;
+              const eventData = JSON.parse(dataStr);
+              const { step, report: streamReport, invoice_data, vendor_profile, risk_assessment } = eventData;
 
               if (step === "upload_complete") {
                 setCurrentStep(1);
@@ -214,17 +156,20 @@ export const Upload: React.FC = () => {
               } else if (step === "risk_assessment") {
                 setCurrentStep(5);
               } else if (step === "fraud_intelligence") {
-                setCurrentStep(5);
+                setCurrentStep(6);
               } else if (step === "final_decision") {
-                setCurrentStep(5);
+                setCurrentStep(6);
               } else if (step === "report_ready") {
-                setReport(finalReport);
+                setReport(streamReport || finalReport);
                 setStatus('done');
 
                 if (invoice_data && Object.keys(invoice_data).length > 0) {
-                  const customInv = mapToInvoice(invoice_data, risk_assessment, fraud_assessment);
-                  setFinalInvoiceId(customInv.id);
-                  addCustomInvoice(customInv);
+                  const finalInv: Invoice = {
+                    ...invoice_data,
+                    id: invoice_data.invoice_number || "INV-NEW"
+                  };
+                  setFinalInvoiceId(finalInv.id);
+                  addCustomInvoice(finalInv);
 
                   if (vendor_profile && Object.keys(vendor_profile).length > 0) {
                     const customVendor = mapToVendor(vendor_profile, risk_assessment);

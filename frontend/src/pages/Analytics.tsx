@@ -10,10 +10,10 @@ export const Analytics: React.FC = () => {
   const detectionRate = totalInvoices > 0 ? Math.round((alertsCount / totalInvoices) * 100) : 0;
 
   // Group risk scores: 0-30 (Low), 31-60 (Med), 61-85 (High), 86-100 (Critical)
-  const lowRiskCount = MOCK_INVOICES.filter(i => i.riskScore <= 30).length;
-  const medRiskCount = MOCK_INVOICES.filter(i => i.riskScore > 30 && i.riskScore <= 60).length;
-  const highRiskCount = MOCK_INVOICES.filter(i => i.riskScore > 60 && i.riskScore <= 85).length;
-  const critRiskCount = MOCK_INVOICES.filter(i => i.riskScore > 85).length;
+  const lowRiskCount = MOCK_INVOICES.filter(i => i.risk_score <= 30).length;
+  const medRiskCount = MOCK_INVOICES.filter(i => i.risk_score > 30 && i.risk_score <= 60).length;
+  const highRiskCount = MOCK_INVOICES.filter(i => i.risk_score > 60 && i.risk_score <= 85).length;
+  const critRiskCount = MOCK_INVOICES.filter(i => i.risk_score > 85).length;
 
   const riskDistribution = [
     { label: 'Low Risk (0-30)', count: lowRiskCount, color: 'bg-emerald-500' },

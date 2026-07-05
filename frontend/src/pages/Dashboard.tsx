@@ -19,7 +19,7 @@ export const Dashboard: React.FC = () => {
   const totalAlerts = MOCK_INVOICES.filter(i => i.status === 'Investigate' || i.recommendation === 'INVESTIGATE').length;
   
   const avgRiskScore = Math.round(
-    MOCK_INVOICES.reduce((acc, curr) => acc + curr.riskScore, 0) / MOCK_INVOICES.length
+    MOCK_INVOICES.reduce((acc, curr) => acc + curr.risk_score, 0) / MOCK_INVOICES.length
   );
 
   const stats = [
@@ -86,8 +86,8 @@ export const Dashboard: React.FC = () => {
                   <Clock className="h-4 w-4" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">{invoice.vendorName}</p>
-                  <p className="text-xs text-slate-500">Invoice {invoice.id} — {invoice.currency}{invoice.amount.toLocaleString()}</p>
+                  <p className="text-sm font-semibold text-slate-800">{invoice.vendor_name}</p>
+                  <p className="text-xs text-slate-500">Invoice {invoice.id} — {invoice.currency}{invoice.invoice_amount.toLocaleString()}</p>
                   <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                     invoice.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                     invoice.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
