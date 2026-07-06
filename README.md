@@ -409,8 +409,7 @@ Performance profiling and optimization reduced the end-to-end investigation pipe
 ![Approval Queue](docs/images/approval_queue.png)
 *   **ERP Vendor Dashboard:**
 ![ERP Vendor Dashboard](docs/images/vendor_dashboard.png)
-*   **Architecture Diagram:** 
-![Architecture Diagram](docs/images/architecture_diagram.png)
+
 
 ---
 
