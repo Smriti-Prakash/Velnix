@@ -58,13 +58,13 @@ The project demonstrates how Google ADK and MCP can be used to build modular AI 
 ## 🌟 Features
 
 *   **Document Uploads:** Support for PDF invoices, image-based invoices (PNG/JPG/JPEG), and tabular CSV file uploads.
-* **AI Invoice Extraction:** AI-powered metadata extraction (amounts, currencies, due dates, PO numbers) from unstructured invoices.
+*   **AI Invoice Extraction:** AI-powered metadata extraction (amounts, currencies, due dates, PO numbers) from unstructured invoices.
 *   **Vendor Verification:** Cross-references active invoices with historical records, trust scores, and onboarding status.
 *   **Mock ERP Integration:** Built-in simulated database storing vendor master files, purchase order (PO) records, and goods receipts.
 *   **Duplicate Invoice Detection:** Checks for invoice number duplication across active and historical payments.
 *   **Risk Assessment:** Evaluates payment terms, high-value transaction thresholds, and watchlist indicators.
 *   **Fraud Assessment:** Flags suspicious wording, sudden bank detail modifications, and extreme deviations from past pricing.
-* **Request-Scoped Canonical Context:** Preserves structured data across agent execution to prevent information loss during multi-agent orchestration.
+*   **Request-Scoped Canonical Context:** Preserves structured data across agent execution to prevent information loss during multi-agent orchestration.
 *   **Explainable Investigation Reports:** Generates a structured markdown report compiling all findings and an actionable recommendation.
 *   **Multi-Agent Orchestration:** Coordinated execution flow driven by Google ADK to process inputs and serialize steps.
 
@@ -190,7 +190,7 @@ sequenceDiagram
     participant RA as Risk Assessment Agent
     participant FI as Fraud Intelligence Agent
     participant FD as Final Decision Agent
-    database DB as ERP database
+    participant DB as ERP database
 
     Client->>Root: Upload Invoice Document
     Root->>IA: Extract invoice fields
@@ -244,7 +244,7 @@ The pipeline sub-agents execute sequentially under the orchestration of the Root
 | :--- | :--- | :--- |
 | **Backend Framework** | FastAPI | Core REST API |
 | **Agent Framework** | Google ADK | Orchestration and context management |
-| **AI Models** | Google Gemini | `Gemini 2.5 Flash` and `Gemini 3.1 Flash Lite` |
+| **AI Models** | Google Gemini | `gemini-3.1-flash-lite` and `gemini-2.5-flash` |
 | **Database** | SQLite (Mock ERP) | Serverless Mock ERP storage |
 | **Integration Protocols** | Model Context Protocol (MCP) | Interface for Mock ERP tool access |
 | **Frontend Framework** | React (Vite) | TypeScript SPA |
@@ -278,6 +278,14 @@ velnix/
 ├── GEMINI.md                   # Agentic development instructions
 └── pyproject.toml              # UV-managed Python dependencies
 ```
+
+---
+
+## 💻 System Requirements
+
+*   **OS:** Windows 10/11, macOS, or Linux.
+*   **RAM:** Minimum 8GB (16GB recommended).
+*   **Storage:** 500MB free space.
 
 ---
 
@@ -395,8 +403,8 @@ Performance profiling and optimization reduced the end-to-end investigation pipe
 
 *   **Home Dashboard:** 
 ![Home Dashboard](docs/images/dashboard.png)
-*   **Explainable Investigation Report:** 
-![Explainable Investigation Report](docs/images/invoice_report.png)
+*   **Investigation Report:** 
+![Investigation Report](docs/images/invoice_report.png)
 *   **Approval Queue:** 
 ![Approval Queue](docs/images/approval_queue.png)
 *   **ERP Vendor Dashboard:**
@@ -429,7 +437,7 @@ Now, `compile_report_tool` bypasses LLM-reconstructed dictionaries entirely and 
 *   **Line-Item Validation:** Automatic row-by-row quantity and unit price cross-referencing against contracted pricing terms.
 *   **Bank Account Verification:** Integration with external banking API standards (e.g. IBAN check systems) to flag changed payment routing.
 *   **Multi-Currency Support:** Historical exchange rate calculations for multi-currency vendor portfolios.
-*   **Production ERP Integration:** Replace the Mock ERP with connectors for enterprise ERP platforms such as SAP S/4HANA, Oracle NetSuite, or Microsoft Dynamics 365 using MCP-compatible integrations.
+*   **Real ERP Connectors:** Connectors for production environments (e.g., SAP S/4HANA, Oracle NetSuite, and Microsoft Dynamics 365).
 *   **ML-Based Anomaly Detection:** Continuous training on historical invoices to flag unusual billing volumes and frequency spikes.
 
 ---
@@ -437,11 +445,3 @@ Now, `compile_report_tool` bypasses LLM-reconstructed dictionaries entirely and 
 ## 📄 License
 
 This project is licensed under the Apache 2.0 License. See the `LICENSE` file for details.
-
----
-
-## 💻 System Requirements
-
-*   **OS:** Windows 10/11, macOS, or Linux.
-*   **RAM:** Minimum 8GB (16GB recommended).
-*   **Storage:** 500MB free space.
