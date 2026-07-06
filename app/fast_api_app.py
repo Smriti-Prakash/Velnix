@@ -537,9 +537,17 @@ async def upload_invoice(file: UploadFile = File(...)):
         try:
             from google.adk.agents.run_config import RunConfig, StreamingMode
             from google.adk.runners import Runner
-            from app.agent import root_agent
+            from app.agent import root_agent, _clear_request_context, _request_ctx as _agent_request_ctx
             from app.app_utils import services
             from google.genai import types
+
+            # Clear canonical stores before each run so that a previous
+            # request's vendor profile cannot leak into this one.
+            _clear_request_context()
+
+            # Propagate the profiler into the agent context (existing pattern).
+            from app.agent import _profiler_ctx as _agent_profiler_ctx
+            _agent_profiler_ctx.profiler = _profiler
             
             session_service = services.get_session_service()
             session = await loop.run_in_executor(
@@ -614,7 +622,9 @@ async def upload_invoice(file: UploadFile = File(...)):
                                     risk_assessment = resp_dict
                                 elif resp.name == "calculate_fraud_tool":
                                     fraud_assessment = resp_dict
-                                elif resp.name == "get_vendor_profile":
+                                elif resp.name in ("get_vendor_profile_tool", "get_vendor_profile"):
+                                    # Capture vendor profile from either the new Python tool
+                                    # (get_vendor_profile_tool) or the legacy MCP tool name.
                                     vendor_profile = resp_dict
                                 elif resp.name == "compile_report_tool":
                                     if isinstance(resp_dict, dict) and "result" in resp_dict:

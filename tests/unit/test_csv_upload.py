@@ -71,9 +71,11 @@ Invoice Date,2026-07-01"""
 
 
 def test_parse_csv_invoice_invalid_date_format():
+    # "01-Jul-26" is not in the supported normalisation formats; the parser
+    # should reject it with the canonical error message.
     csv_content = b"""Invoice Number,INV-2026-CSV
 Vendor Name,SuperStore
 Invoice Amount,500.00
-Invoice Date,07/01/2026"""
+Invoice Date,01-Jul-26"""
     with pytest.raises(ValueError, match="Invalid Invoice Date format \\(must be YYYY-MM-DD\\)."):
         parse_csv_invoice(csv_content)

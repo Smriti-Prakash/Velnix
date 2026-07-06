@@ -44,8 +44,6 @@ def parse_invoice_with_gemini(invoice_text: str) -> InvoiceData:
     Falls back to regex-based extraction if API calls fail or credentials are missing.
     """
     import os
-    import logging
-    _diag = logging.getLogger("velnix.diag")
     try:
         api_key = os.environ.get("GEMINI_API_KEY")
         if api_key:
@@ -83,22 +81,12 @@ def parse_invoice_with_gemini(invoice_text: str) -> InvoiceData:
 
             import json
             parsed_json = json.loads(response.text)
-            result = InvoiceData(**parsed_json)
-            _diag.info(
-                "[VENDOR_DIAG] Stage 1 (Gemini parse): raw vendor_name extracted = %r  "
-                "(repr shows leading/trailing whitespace or hidden chars)",
-                result.vendor_name,
-            )
-            return result
-    except Exception as exc:
-        _diag.warning("[VENDOR_DIAG] Stage 1 (Gemini parse): FAILED with %s — falling back to regex", exc)
+            return InvoiceData(**parsed_json)
+    except Exception:
+        # Fall back to regex parsing if Gemini is unavailable or errors.
+        pass
 
-    result = parse_invoice(invoice_text)
-    _diag.info(
-        "[VENDOR_DIAG] Stage 1 (regex fallback parse): raw vendor_name extracted = %r",
-        result.vendor_name,
-    )
-    return result
+    return parse_invoice(invoice_text)
 
 
 def parse_invoice(invoice_text: str) -> InvoiceData:
